@@ -76,6 +76,103 @@
     return 1;
   }
 
+  function normalizeRepeatWindowTargets(repeatWindowTargets, repeatWindows, type) {
+    if (type !== "measurable") {
+      return {};
+    }
+
+    let source = repeatWindowTargets;
+    if (typeof source === "string") {
+      const trimmed = source.trim();
+      if (!trimmed) {
+        source = {};
+      } else {
+        try {
+          source = JSON.parse(trimmed);
+        } catch (error) {
+          source = {};
+        }
+      }
+    }
+
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      return {};
+    }
+
+    return (repeatWindows || []).reduce(function (targets, windowKey) {
+      const numericValue = Number(source[windowKey]);
+      if (Number.isFinite(numericValue) && numericValue > 0) {
+        targets[windowKey] = normalizeTarget(numericValue);
+      }
+      return targets;
+    }, {});
+  }
+
+  function normalizeEntryWindowAllocations(windowAllocations) {
+    let source = windowAllocations;
+    if (typeof source === "string") {
+      const trimmed = source.trim();
+      if (!trimmed) {
+        source = {};
+      } else {
+        try {
+          source = JSON.parse(trimmed);
+        } catch (error) {
+          source = {};
+        }
+      }
+    }
+
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      return {};
+    }
+
+    return Object.keys(source).reduce(function (allocations, windowKey) {
+      const normalizedWindowKey = normalizeWindowKey(windowKey);
+      const numericValue = Number(source[windowKey]);
+      if (normalizedWindowKey && Number.isFinite(numericValue) && numericValue > 0) {
+        allocations[normalizedWindowKey] = Math.round(numericValue * 10000) / 10000;
+      }
+      return allocations;
+    }, {});
+  }
+
+  function getHabitDailyTarget(habit) {
+    if (!habit) {
+      return 0;
+    }
+
+    if (habit.type !== "measurable") {
+      return normalizeTarget(habit.target);
+    }
+
+    const primaryTarget = normalizeTarget(habit.target);
+    const repeatedTarget = Object.keys(habit.repeatWindowTargets || {}).reduce(function (sum, windowKey) {
+      return sum + normalizeTarget(habit.repeatWindowTargets[windowKey]);
+    }, 0);
+
+    return primaryTarget + repeatedTarget;
+  }
+
+  function getHabitAppearanceTarget(habit, windowKey) {
+    if (!habit) {
+      return 0;
+    }
+
+    if (habit.type !== "measurable") {
+      return normalizeTarget(habit.target);
+    }
+
+    const normalizedWindowKey = normalizeWindowKey(windowKey);
+    const primaryWindowKey = `${normalizeTime(habit.windowStart, "07:00")}-${normalizeTime(habit.windowEnd, "07:30")}`;
+    if (!normalizedWindowKey || normalizedWindowKey === primaryWindowKey) {
+      return normalizeTarget(habit.target);
+    }
+
+    const numericValue = Number(habit.repeatWindowTargets && habit.repeatWindowTargets[normalizedWindowKey]);
+    return Number.isFinite(numericValue) && numericValue > 0 ? normalizeTarget(numericValue) : 0;
+  }
+
   function normalizeHabit(habit) {
     if (!habit || typeof habit !== "object") {
       return null;
@@ -84,6 +181,10 @@
     const type = String(habit.type || "checkbox").trim().toLowerCase() === "measurable"
       ? "measurable"
       : "checkbox";
+    const windowStart = normalizeTime(habit.windowStart, "07:00");
+    const windowEnd = normalizeTime(habit.windowEnd, "07:30");
+    const primaryWindowKey = `${windowStart}-${windowEnd}`;
+    const repeatWindows = normalizeRepeatWindows(habit.repeatWindows, primaryWindowKey);
 
     return {
       id: String(habit.id || `habit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
@@ -92,16 +193,14 @@
       type: type,
       unit: String(habit.unit || "").trim(),
       target: normalizeTarget(habit.target),
-      windowStart: normalizeTime(habit.windowStart, "07:00"),
-      windowEnd: normalizeTime(habit.windowEnd, "07:30"),
+      windowStart: windowStart,
+      windowEnd: windowEnd,
       activeDays: normalizeDays(habit.activeDays),
       notes: String(habit.notes || "").trim(),
       createdAt: habit.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      repeatWindows: normalizeRepeatWindows(
-        habit.repeatWindows,
-        `${normalizeTime(habit.windowStart, "07:00")}-${normalizeTime(habit.windowEnd, "07:30")}`
-      )
+      repeatWindows: repeatWindows,
+      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type)
     };
   }
 
@@ -128,7 +227,8 @@
       status: status,
       value: value,
       note: String(entry.note || "").trim(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      windowAllocations: normalizeEntryWindowAllocations(entry.windowAllocations)
     };
   }
 
@@ -241,6 +341,7 @@
 
     habits.forEach((habit) => {
       const windowKeys = [`${habit.windowStart}-${habit.windowEnd}`].concat(habit.repeatWindows || []);
+      const dailyTarget = getHabitDailyTarget(habit);
       windowKeys.forEach((windowKey) => {
         const parts = windowKey.split("-");
         const windowStart = parts[0];
@@ -258,8 +359,10 @@
         grouped.get(windowKey).habits.push({
           ...habit,
           appearanceKey: `${habit.id}::${windowKey}`,
+          appearanceTarget: getHabitAppearanceTarget(habit, windowKey),
           primaryWindowEnd: habit.windowEnd,
           primaryWindowStart: habit.windowStart,
+          totalTarget: dailyTarget,
           windowEnd: windowEnd,
           windowStart: windowStart
         });
@@ -316,17 +419,7 @@
   }
 
   function getHabitProgress(habit, entry) {
-    if (!habit) {
-      return {
-        complete: false,
-        label: "Planned",
-        progressRatio: 0,
-        statusTone: "pending",
-        value: ""
-      };
-    }
-
-    if (!entry) {
+    if (!habit || !entry) {
       return {
         complete: false,
         label: "Planned",
@@ -368,7 +461,8 @@
 
     const value = Number(entry.value);
     const safeValue = Number.isFinite(value) ? value : 0;
-    const ratio = Math.max(0, Math.min(1, safeValue / habit.target));
+    const targetValue = getHabitDailyTarget(habit);
+    const ratio = targetValue > 0 ? Math.max(0, Math.min(1, safeValue / targetValue)) : 0;
 
     if (entry.status === "skipped") {
       return {
@@ -380,7 +474,7 @@
       };
     }
 
-    if (safeValue >= habit.target) {
+    if (safeValue >= targetValue) {
       return {
         complete: true,
         label: "Target met",
@@ -477,6 +571,8 @@
     getDailySummary: getDailySummary,
     getEntryForDate: getEntryForDate,
     getHabit: getHabit,
+    getHabitAppearanceTarget: getHabitAppearanceTarget,
+    getHabitDailyTarget: getHabitDailyTarget,
     getHabitProgress: getHabitProgress,
     getMeta: getMeta,
     getStateSnapshot: getStateSnapshot,

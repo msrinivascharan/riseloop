@@ -29,7 +29,8 @@
         "notes",
         "createdAt",
         "updatedAt",
-        "repeatWindows"
+        "repeatWindows",
+        "repeatWindowTargets"
       ]
     },
     entries: {
@@ -41,7 +42,8 @@
         "status",
         "value",
         "note",
-        "updatedAt"
+        "updatedAt",
+        "windowAllocations"
       ]
     }
   };
@@ -68,6 +70,7 @@
       ready: false,
       signedIn: false,
       syncing: false,
+      needsReconnect: false,
       error: ""
     }
   };
@@ -82,6 +85,78 @@
       ...patch
     };
     emit();
+  }
+
+  function getGoogleErrorCode(error) {
+    const directCode = Number(error && error.status);
+    if (Number.isFinite(directCode)) {
+      return directCode;
+    }
+
+    const resultCode = Number(error && error.result && error.result.error && error.result.error.code);
+    if (Number.isFinite(resultCode)) {
+      return resultCode;
+    }
+
+    const nestedCode = Number(error && error.error && error.error.code);
+    if (Number.isFinite(nestedCode)) {
+      return nestedCode;
+    }
+
+    return 0;
+  }
+
+  function getGoogleErrorText(error) {
+    return String(
+      (error && error.message)
+      || (error && error.result && error.result.error && error.result.error.message)
+      || (error && error.error && error.error.message)
+      || ""
+    ).toLowerCase();
+  }
+
+  function isReconnectRequiredError(error) {
+    const code = getGoogleErrorCode(error);
+    if (code === 401 || code === 403) {
+      return true;
+    }
+
+    const text = getGoogleErrorText(error);
+    return text.includes("invalid credentials")
+      || text.includes("login required")
+      || text.includes("request had invalid authentication credentials")
+      || (text.includes("token") && text.includes("expired"))
+      || (text.includes("access token") && text.includes("invalid"))
+      || (text.includes("auth") && text.includes("expired"));
+  }
+
+  function buildReconnectError(message, cause) {
+    const reconnectError = new Error(message);
+    reconnectError.cause = cause;
+    reconnectError.requiresReconnect = true;
+    return reconnectError;
+  }
+
+  function handleGoogleFailure(error, fallbackMessage, reconnectMessage) {
+    if (isReconnectRequiredError(error)) {
+      if (window.gapi && window.gapi.client) {
+        window.gapi.client.setToken("");
+      }
+      window.localStorage.removeItem(AUTH_FLAG_KEY);
+      updateStatus({
+        needsReconnect: true,
+        syncing: false,
+        error: reconnectMessage
+      });
+      return buildReconnectError(reconnectMessage, error);
+    }
+
+    updateStatus({
+      needsReconnect: false,
+      syncing: false,
+      error: fallbackMessage
+    });
+    return error;
   }
 
   function subscribe(listener) {
@@ -161,6 +236,103 @@
     return 1;
   }
 
+  function normalizeRepeatWindowTargets(repeatWindowTargets, repeatWindows, type) {
+    if (type !== "measurable") {
+      return {};
+    }
+
+    let source = repeatWindowTargets;
+    if (typeof source === "string") {
+      const trimmed = source.trim();
+      if (!trimmed) {
+        source = {};
+      } else {
+        try {
+          source = JSON.parse(trimmed);
+        } catch (error) {
+          source = {};
+        }
+      }
+    }
+
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      return {};
+    }
+
+    return (repeatWindows || []).reduce(function (targets, windowKey) {
+      const numericValue = Number(source[windowKey]);
+      if (Number.isFinite(numericValue) && numericValue > 0) {
+        targets[windowKey] = normalizeTarget(numericValue);
+      }
+      return targets;
+    }, {});
+  }
+
+  function normalizeEntryWindowAllocations(windowAllocations) {
+    let source = windowAllocations;
+    if (typeof source === "string") {
+      const trimmed = source.trim();
+      if (!trimmed) {
+        source = {};
+      } else {
+        try {
+          source = JSON.parse(trimmed);
+        } catch (error) {
+          source = {};
+        }
+      }
+    }
+
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      return {};
+    }
+
+    return Object.keys(source).reduce(function (allocations, windowKey) {
+      const normalizedWindowKey = normalizeWindowKey(windowKey);
+      const numericValue = Number(source[windowKey]);
+      if (normalizedWindowKey && Number.isFinite(numericValue) && numericValue > 0) {
+        allocations[normalizedWindowKey] = Math.round(numericValue * 10000) / 10000;
+      }
+      return allocations;
+    }, {});
+  }
+
+  function getHabitDailyTarget(habit) {
+    if (!habit) {
+      return 0;
+    }
+
+    if (habit.type !== "measurable") {
+      return normalizeTarget(habit.target);
+    }
+
+    const primaryTarget = normalizeTarget(habit.target);
+    const repeatedTarget = Object.keys(habit.repeatWindowTargets || {}).reduce(function (sum, windowKey) {
+      return sum + normalizeTarget(habit.repeatWindowTargets[windowKey]);
+    }, 0);
+
+    return primaryTarget + repeatedTarget;
+  }
+
+  function getHabitAppearanceTarget(habit, windowKey) {
+    if (!habit) {
+      return 0;
+    }
+
+    if (habit.type !== "measurable") {
+      return normalizeTarget(habit.target);
+    }
+
+    const normalizedWindowKey = normalizeWindowKey(windowKey);
+    const primaryWindowKey = `${normalizeTime(habit.windowStart, "07:00")}-${normalizeTime(habit.windowEnd, "07:30")}`;
+    if (!normalizedWindowKey || normalizedWindowKey === primaryWindowKey) {
+      return normalizeTarget(habit.target);
+    }
+
+    const numericValue = Number(habit.repeatWindowTargets && habit.repeatWindowTargets[normalizedWindowKey]);
+    return Number.isFinite(numericValue) && numericValue > 0 ? normalizeTarget(numericValue) : 0;
+  }
+
   function normalizeHabit(habit) {
     if (!habit || typeof habit !== "object") {
       return null;
@@ -169,6 +341,10 @@
     const type = String(habit.type || "checkbox").trim().toLowerCase() === "measurable"
       ? "measurable"
       : "checkbox";
+    const windowStart = normalizeTime(habit.windowStart, "07:00");
+    const windowEnd = normalizeTime(habit.windowEnd, "07:30");
+    const primaryWindowKey = `${windowStart}-${windowEnd}`;
+    const repeatWindows = normalizeRepeatWindows(habit.repeatWindows, primaryWindowKey);
 
     return {
       id: String(habit.id || `habit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
@@ -177,16 +353,14 @@
       type: type,
       unit: String(habit.unit || "").trim(),
       target: normalizeTarget(habit.target),
-      windowStart: normalizeTime(habit.windowStart, "07:00"),
-      windowEnd: normalizeTime(habit.windowEnd, "07:30"),
+      windowStart: windowStart,
+      windowEnd: windowEnd,
       activeDays: normalizeDays(habit.activeDays),
       notes: String(habit.notes || "").trim(),
       createdAt: habit.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      repeatWindows: normalizeRepeatWindows(
-        habit.repeatWindows,
-        `${normalizeTime(habit.windowStart, "07:00")}-${normalizeTime(habit.windowEnd, "07:30")}`
-      )
+      repeatWindows: repeatWindows,
+      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type)
     };
   }
 
@@ -213,7 +387,8 @@
       status: status,
       value: value,
       note: String(entry.note || "").trim(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      windowAllocations: normalizeEntryWindowAllocations(entry.windowAllocations)
     };
   }
 
@@ -252,6 +427,7 @@
 
     habits.forEach((habit) => {
       const windowKeys = [`${habit.windowStart}-${habit.windowEnd}`].concat(habit.repeatWindows || []);
+      const dailyTarget = getHabitDailyTarget(habit);
       windowKeys.forEach((windowKey) => {
         const parts = windowKey.split("-");
         const windowStart = parts[0];
@@ -269,8 +445,10 @@
         grouped.get(windowKey).habits.push({
           ...habit,
           appearanceKey: `${habit.id}::${windowKey}`,
+          appearanceTarget: getHabitAppearanceTarget(habit, windowKey),
           primaryWindowEnd: habit.windowEnd,
           primaryWindowStart: habit.windowStart,
+          totalTarget: dailyTarget,
           windowEnd: windowEnd,
           windowStart: windowStart
         });
@@ -326,41 +504,22 @@
           value: ""
         };
       }
-    } else {
-      const value = Number(entry.value);
-      const safeValue = Number.isFinite(value) ? value : 0;
-      const ratio = Math.max(0, Math.min(1, safeValue / habit.target));
 
-      if (entry.status === "skipped") {
-        return {
-          complete: false,
-          label: "Not done",
-          progressRatio: 0,
-          statusTone: "pending",
-          value: 0
-        };
-      }
+      return {
+        complete: false,
+        label: "Planned",
+        progressRatio: 0,
+        statusTone: "pending",
+        value: ""
+      };
+    }
 
-      if (safeValue >= habit.target) {
-        return {
-          complete: true,
-          label: "Target met",
-          progressRatio: 1,
-          statusTone: "done",
-          value: safeValue
-        };
-      }
+    const value = Number(entry.value);
+    const safeValue = Number.isFinite(value) ? value : 0;
+    const targetValue = getHabitDailyTarget(habit);
+    const ratio = targetValue > 0 ? Math.max(0, Math.min(1, safeValue / targetValue)) : 0;
 
-      if (safeValue > 0) {
-        return {
-          complete: false,
-          label: "In progress",
-          progressRatio: ratio,
-          statusTone: "active",
-          value: safeValue
-        };
-      }
-
+    if (entry.status === "skipped") {
       return {
         complete: false,
         label: "Not done",
@@ -370,12 +529,32 @@
       };
     }
 
+    if (safeValue >= targetValue) {
+      return {
+        complete: true,
+        label: "Target met",
+        progressRatio: 1,
+        statusTone: "done",
+        value: safeValue
+      };
+    }
+
+    if (safeValue > 0) {
+      return {
+        complete: false,
+        label: "In progress",
+        progressRatio: ratio,
+        statusTone: "active",
+        value: safeValue
+      };
+    }
+
     return {
       complete: false,
-      label: "Planned",
+      label: "Not done",
       progressRatio: 0,
       statusTone: "pending",
-      value: ""
+      value: 0
     };
   }
 
@@ -590,6 +769,7 @@
           window.localStorage.setItem(AUTH_FLAG_KEY, "true");
           updateStatus({
             signedIn: true,
+            needsReconnect: false,
             error: ""
           });
           await sync();
@@ -624,6 +804,7 @@
     updateStatus({
       signedIn: false,
       syncing: false,
+      needsReconnect: false,
       error: ""
     });
   }
@@ -713,7 +894,8 @@
         notes: row[9],
         createdAt: row[10],
         updatedAt: row[11],
-        repeatWindows: row[12]
+        repeatWindows: row[12],
+        repeatWindowTargets: row[13]
       }))
       .filter(Boolean);
   }
@@ -728,7 +910,8 @@
         status: row[3],
         value: row[4],
         note: row[5],
-        updatedAt: row[6]
+        updatedAt: row[6],
+        windowAllocations: row[7]
       }))
       .filter(Boolean);
   }
@@ -747,7 +930,10 @@
       habit.notes,
       habit.createdAt,
       habit.updatedAt,
-      (habit.repeatWindows || []).join("|")
+      (habit.repeatWindows || []).join("|"),
+      Object.keys(habit.repeatWindowTargets || {}).length
+        ? JSON.stringify(habit.repeatWindowTargets)
+        : ""
     ]);
   }
 
@@ -759,7 +945,10 @@
       entry.status,
       entry.value === "" ? "" : entry.value,
       entry.note,
-      entry.updatedAt
+      entry.updatedAt,
+      Object.keys(entry.windowAllocations || {}).length
+        ? JSON.stringify(entry.windowAllocations)
+        : ""
     ]);
   }
 
@@ -830,11 +1019,11 @@
       });
     } catch (error) {
       console.error(error);
-      updateStatus({
-        syncing: false,
-        error: "Could not sync StudioHabits / StudioEntries from Google Sheets."
-      });
-      throw error;
+      throw handleGoogleFailure(
+        error,
+        "Could not sync StudioHabits / StudioEntries from Google Sheets.",
+        "Google session expired. Connect Google Sheets again, then sync Riseloop."
+      );
     }
   }
 
@@ -846,6 +1035,7 @@
       throw new Error("Habit name is required.");
     }
 
+    const previousHabits = state.habits.slice();
     const index = state.habits.findIndex((habit) => habit.id === normalized.id);
     if (index >= 0) {
       normalized.createdAt = state.habits[index].createdAt;
@@ -869,11 +1059,12 @@
       emit();
       return normalized;
     } catch (error) {
-      updateStatus({
-        syncing: false,
-        error: "Could not save the master habit list to Google Sheets."
-      });
-      throw error;
+      state.habits = previousHabits;
+      throw handleGoogleFailure(
+        error,
+        "Could not save the master habit list to Google Sheets.",
+        "Google session expired. Connect Google Sheets again, then save the master habit list."
+      );
     }
 
     return normalized;
@@ -881,6 +1072,8 @@
 
   async function deleteHabit(id) {
     requireSignedIn();
+    const previousHabits = state.habits.slice();
+    const previousEntries = state.entries.slice();
     state.habits = state.habits.filter((habit) => habit.id !== id);
     state.entries = state.entries.filter((entry) => entry.habitId !== id);
 
@@ -898,11 +1091,13 @@
       });
       emit();
     } catch (error) {
-      updateStatus({
-        syncing: false,
-        error: "Could not delete the habit from Google Sheets."
-      });
-      throw error;
+      state.habits = previousHabits;
+      state.entries = previousEntries;
+      throw handleGoogleFailure(
+        error,
+        "Could not delete the habit from Google Sheets.",
+        "Google session expired. Connect Google Sheets again, then delete the habit."
+      );
     }
   }
 
@@ -913,6 +1108,7 @@
       throw new Error("A habit entry needs at least a habitId and date.");
     }
 
+    const previousEntries = state.entries.slice();
     const index = state.entries.findIndex(
       (entry) => entry.habitId === normalized.habitId && entry.dateKey === normalized.dateKey
     );
@@ -938,11 +1134,12 @@
       });
       emit();
     } catch (error) {
-      updateStatus({
-        syncing: false,
-        error: "Could not save the day entry to Google Sheets."
-      });
-      throw error;
+      state.entries = previousEntries;
+      throw handleGoogleFailure(
+        error,
+        "Could not save the day entry to Google Sheets.",
+        "Google session expired. Connect Google Sheets again, then press Pause or Save again."
+      );
     }
 
     return normalized;
@@ -951,6 +1148,7 @@
   async function clearEntry(habitId, dateLike) {
     requireSignedIn();
     const dateKey = formatDateKey(dateLike);
+    const previousEntries = state.entries.slice();
     state.entries = state.entries.filter(
       (entry) => !(entry.habitId === habitId && entry.dateKey === dateKey)
     );
@@ -969,11 +1167,12 @@
       });
       emit();
     } catch (error) {
-      updateStatus({
-        syncing: false,
-        error: "Could not reset the entry in Google Sheets."
-      });
-      throw error;
+      state.entries = previousEntries;
+      throw handleGoogleFailure(
+        error,
+        "Could not reset the entry in Google Sheets.",
+        "Google session expired. Connect Google Sheets again, then reset the entry again."
+      );
     }
   }
 
@@ -986,6 +1185,8 @@
     getDailySummary: getDailySummary,
     getEntryForDate: getEntryForDate,
     getHabit: getHabit,
+    getHabitAppearanceTarget: getHabitAppearanceTarget,
+    getHabitDailyTarget: getHabitDailyTarget,
     getHabitProgress: getHabitProgress,
     getMeta: getMeta,
     getStateSnapshot: getStateSnapshot,
@@ -1007,3 +1208,4 @@
   window.systemHabitsGapiLoaded = handleGapiLoaded;
   window.systemHabitsGisLoaded = handleGisLoaded;
 })(window);
+

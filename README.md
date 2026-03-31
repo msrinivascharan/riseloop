@@ -51,12 +51,11 @@ The app title and UI are branded as `Riseloop Studio`.
 - Each window shows a summary directly on the collapsed window card.
 
 Window summary includes:
-- total habits
-- done count
-- pending count
+- one merged habit-progress box showing total, done, and pending
 - targeted time
+- unplanned time
 - time logged
-- unlogged or unused time
+- unlogged so far or unused after close
 - elapsed time bar
 
 ### Master Habit Studio
@@ -87,9 +86,10 @@ Example:
 Important behavior:
 - the habit keeps one unique id
 - score is shared
-- logged value is shared
+- the daily total is shared
 - focus-timer progress is shared
 - repeated appearances are labeled like `Rep 1 of 3`, `Rep 2 of 3`, `Rep 3 of 3`
+- per-window logged allocations are now saved with each day entry
 
 ### Focus Timer
 Time-based measurable habits can show a habit-level focus timer.
@@ -99,6 +99,7 @@ Current behavior:
 - works like a persistent stopwatch, not a countdown
 - every `Pause` adds the elapsed session to the habit's logged value
 - survives refresh, browser close, app reopen, and system restart through local persistence
+- pause/save writes the repeated-window allocation back into the day entry
 - shows a small progress bar against the habit target
 
 The timer is available for measurable habits with time units such as:
@@ -156,6 +157,7 @@ It creates and uses these tabs:
 - createdAt
 - updatedAt
 - repeatWindows
+- repeatWindowTargets
 
 `StudioEntries` stores:
 - entry id
@@ -165,13 +167,14 @@ It creates and uses these tabs:
 - value
 - note
 - updatedAt
+- windowAllocations for repeated measurable habits
 
 ### Local Fallback
 If Google Sheets is not connected, the app can still work from local browser storage.
 
 Local storage is also used for:
 - timer persistence
-- some migration and fallback behavior
+- temporary migration fallback for older repeated-window allocations that have not been re-saved yet
 
 ### Important Delete Behavior
 Deleting a habit removes:
@@ -273,6 +276,79 @@ python -m http.server 8000
 ```
 
 Keep the terminal open while using the app.
+
+## First 10 Minutes Setup
+
+If you found this repo on GitHub and want to get to a working app quickly, use this path:
+
+### 1. Download or Clone
+Get the repo onto your machine and open the project folder.
+
+### 2. Create Your Local Config
+Copy:
+
+`system_habits_config.example.js`
+
+to:
+
+`system_habits_config.local.js`
+
+Then fill in your own Google values:
+- `apiKey`
+- `spreadsheetId`
+- `clientId`
+- `scopes`
+
+### 3. Prepare Google Sheets
+Create or choose a Google Sheet for your own system.
+
+The app will create these tabs when you connect:
+- `StudioHabits`
+- `StudioEntries`
+
+### 4. Prepare Google Cloud
+In Google Cloud:
+- enable the Google Sheets API
+- configure the OAuth consent screen
+- create an OAuth Web Client
+- create an API key
+- add `http://localhost:8000` as an authorized JavaScript origin
+
+### 5. Run the App Locally
+From the project folder:
+
+```powershell
+cd C:\SpaceS\Riseloop
+py -m http.server 8000
+```
+
+Then open:
+
+```text
+http://localhost:8000/index.html
+```
+
+### 6. Connect Google Sheets
+Inside the app:
+- click `Connect Google Sheets`
+- allow Google authorization
+- click `Sync now` if needed
+
+### 7. Build Your First System
+In Master Habit Studio, add:
+- a few categories
+- a few time windows
+- 3 to 5 starter habits
+- measurable targets where needed
+
+### 8. Log a Real Day
+Use the daily board to:
+- mark checkbox habits done
+- log measurable habits
+- try the focus timer for time-based habits
+- open `Reports` after a few days of data
+
+If something does not connect on the first try, the most common cause is opening the app from `file://` instead of `http://localhost`.
 
 ## Why `http://localhost` Matters
 
@@ -406,15 +482,15 @@ What is there now:
 - overview cards for habits, categories, tracked days, 30-day score, windows, and logged time
 - insight cards for momentum, reliability, growth pocket, best day rhythm, strongest category, and tradeoff watch
 - positive correlations and negative or tradeoff correlations between habits
-- window intelligence showing planned time, logged time, unlogged time, spare capacity, and target-hit behavior
+- window intelligence showing planned time, logged time, unlogged time, spare capacity, and target-hit behavior across the last 30 days
 
 Important design choice:
-- window intelligence uses each habit's primary window only, so repeated appearances do not double-count the same logged time
+- window intelligence still uses each habit's primary window only, so repeated appearances do not yet produce full per-window historical analytics
 - correlations use recent daily progress patterns as signals, not proof of causation
 
 This means:
 - the reports page and the daily board stay aligned because they read the same `StudioHabits` and `StudioEntries` backend
-- repeated habits still share one underlying entry, while reports avoid inflating time-based analytics
+- repeated-window allocations are now stored in day entries, but the reports layer still uses conservative primary-window analytics for window intelligence
 
 ## Privacy and Security Notes
 
@@ -435,6 +511,7 @@ Some behaviors are intentional and product-driven:
 - the master list stays collapsible
 - measurable habits default to `0`
 - repeated appearances share one habit id and one daily entry
+- repeated measurable habits persist their per-window allocations inside the entry data
 - window cards summarize their own time and progress
 
 ## Roadmap Ideas

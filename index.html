@@ -607,6 +607,14 @@
       letter-spacing: -0.03em;
     }
 
+    .window-summary-copy {
+      line-height: 1.5;
+      font-size: 0.82rem;
+      font-weight: 500;
+      letter-spacing: 0;
+      color: #607161;
+    }
+
     .window-summary-progress {
       display: grid;
       gap: 6px;
@@ -1038,37 +1046,94 @@
     }
 
     .repeat-window-list {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
+      display: grid;
+      gap: 12px;
     }
 
-    .repeat-window-chip {
-      display: inline-flex;
+    .repeat-window-row {
+      display: grid;
+      gap: 12px;
       align-items: center;
-      gap: 10px;
-      min-height: 40px;
-      padding: 8px 10px 8px 14px;
-      border-radius: 999px;
+      padding: 14px;
+      border-radius: 18px;
       background: rgba(230, 243, 234, 0.9);
       border: 1px solid rgba(100, 159, 125, 0.18);
-      color: var(--accent-strong);
-      font-size: 0.9rem;
-      font-weight: 700;
     }
 
-    .repeat-window-chip button {
+    .repeat-window-row.with-target {
+      grid-template-columns: minmax(0, 1fr) minmax(140px, 180px) auto;
+    }
+
+    .repeat-window-row.without-target {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .repeat-window-main {
+      display: grid;
+      gap: 8px;
+    }
+
+    .repeat-window-badge {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 28px;
-      min-height: 28px;
-      padding: 0 9px;
+      width: fit-content;
+      padding: 5px 10px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(91, 112, 95, 0.1);
+      color: var(--accent-strong);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .repeat-window-copy {
+      display: grid;
+      gap: 4px;
+    }
+
+    .repeat-window-copy strong {
+      color: var(--ink);
+      font-size: 0.96rem;
+    }
+
+    .repeat-window-copy span {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .repeat-window-target {
+      display: grid;
+      gap: 6px;
+    }
+
+    .repeat-window-target span {
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .repeat-window-target input {
+      width: 100%;
+    }
+
+    .repeat-window-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 88px;
+      min-height: 38px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
       border: 1px solid rgba(91, 112, 95, 0.1);
       color: var(--danger);
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       font-weight: 700;
     }
 
@@ -1372,6 +1437,15 @@
         flex-direction: column;
       }
 
+      .repeat-window-row.with-target,
+      .repeat-window-row.without-target {
+        grid-template-columns: 1fr;
+      }
+
+      .repeat-window-target {
+        min-width: 0;
+      }
+
       .timer-head,
       .timer-readout {
         justify-content: flex-start;
@@ -1544,7 +1618,7 @@
                 <label for="habitRepeatWindowSelect">Repetition windows</label>
                 <div class="repeat-window-builder">
                   <p class="field-hint">
-                    Add other existing windows where this same habit should appear again. All repetitions share one score, one logged value, and one timer history for the day.
+                    Add other existing windows where this same habit should appear again. All repetitions share one score, one logged value, and one timer history for the day. Measurable repetitions can also carry their own target for that specific window.
                   </p>
                   <div class="repeat-window-select-row">
                     <select id="habitRepeatWindowSelect">
@@ -1622,11 +1696,11 @@
     </main>
   </div>
 
-  <script src="system_habits_backend.local.js"></script>
+  <script src="system_habits_backend.local.js?v=20260326-resetfix2"></script>
   <script src="system_habits_config.local.js"></script>
-  <script src="system_habits_shared.js"></script>
-  <script src="system_habits_backend.google.js"></script>
-  <script src="system_habits_app.js"></script>
+  <script src="system_habits_shared.js?v=20260326-resetfix2"></script>
+  <script src="system_habits_backend.google.js?v=20260326-resetfix2"></script>
+  <script src="system_habits_app.js?v=20260326-resetfix2"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 </body>

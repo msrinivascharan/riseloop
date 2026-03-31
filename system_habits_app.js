@@ -23,10 +23,25 @@
     { pattern: /\b(h|hr|hrs|hour|hours)\b/i, multiplier: 60 }
   ];
   const FOCUS_TIMER_STORAGE_KEY = "system-habits-focus-timers-v1";
+  const WINDOW_LOG_STORAGE_KEY = "system-habits-window-logs-v1";
 
   function readPersistedTimerState() {
     try {
       const rawValue = window.localStorage.getItem(FOCUS_TIMER_STORAGE_KEY);
+      if (!rawValue) {
+        return {};
+      }
+
+      const parsedValue = JSON.parse(rawValue);
+      return parsedValue && typeof parsedValue === "object" ? parsedValue : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function readPersistedWindowLogState() {
+    try {
+      const rawValue = window.localStorage.getItem(WINDOW_LOG_STORAGE_KEY);
       if (!rawValue) {
         return {};
       }
@@ -43,7 +58,8 @@
     editingHabitId: null,
     measureDrafts: {},
     selectedDateKey: googleBackend.formatDateKey(new Date()),
-    timers: readPersistedTimerState()
+    timers: readPersistedTimerState(),
+    windowLogs: readPersistedWindowLogState()
   };
   let timerIntervalId = null;
 
@@ -109,8 +125,8 @@
     return window.location.protocol === "file:";
   }
 
-  function getMeasureDraftKey(habitId, dateKey) {
-    return `${dateKey}::${habitId}`;
+  function getMeasureDraftKey(habitId, dateKey, windowKey) {
+    return `${dateKey}::${habitId}::${String(windowKey || "shared")}`;
   }
 
   function getBoardPanelKey(groupKey, dateKey) {
@@ -134,34 +150,34 @@
     state.categoryPanels[getBoardPanelKey(groupKey, dateKey)] = Boolean(isOpen);
   }
 
-  function getMeasureDraftValue(habitId, dateKey) {
-    const key = getMeasureDraftKey(habitId, dateKey);
+  function getMeasureDraftValue(habitId, dateKey, windowKey) {
+    const key = getMeasureDraftKey(habitId, dateKey, windowKey);
     return Object.prototype.hasOwnProperty.call(state.measureDrafts, key)
       ? state.measureDrafts[key]
       : undefined;
   }
 
-  function setMeasureDraftValue(habitId, dateKey, value) {
-    state.measureDrafts[getMeasureDraftKey(habitId, dateKey)] = String(value == null ? "" : value);
+  function setMeasureDraftValue(habitId, dateKey, windowKey, value) {
+    state.measureDrafts[getMeasureDraftKey(habitId, dateKey, windowKey)] = String(value == null ? "" : value);
   }
 
-  function clearMeasureDraftValue(habitId, dateKey) {
-    delete state.measureDrafts[getMeasureDraftKey(habitId, dateKey)];
-  }
+  function clearMeasureDraftValue(habitId, dateKey, windowKey) {
+    if (windowKey != null && String(windowKey).trim()) {
+      delete state.measureDrafts[getMeasureDraftKey(habitId, dateKey, windowKey)];
+      return;
+    }
 
-  function syncVisibleMeasureInputs(habitId, value, sourceInput) {
-    document.querySelectorAll(`[data-entry-input][data-habit-id="${habitId}"]`).forEach((input) => {
-      if (sourceInput && input === sourceInput) {
-        return;
+    const prefix = `${dateKey}::${habitId}::`;
+    Object.keys(state.measureDrafts).forEach((draftKey) => {
+      if (draftKey.indexOf(prefix) === 0) {
+        delete state.measureDrafts[draftKey];
       }
-
-      input.value = value;
     });
   }
 
   function clearHabitTransientState(habitId) {
     Object.keys(state.measureDrafts).forEach((draftKey) => {
-      if (draftKey.endsWith(`::${habitId}`)) {
+      if (draftKey.indexOf(`::${habitId}::`) !== -1) {
         delete state.measureDrafts[draftKey];
       }
     });
@@ -172,10 +188,10 @@
       }
     });
 
+    clearWindowLogsForHabit(habitId);
     persistTimerState();
     syncTimerTicker();
   }
-
   function getTimerUnitMultiplier(unit) {
     const normalized = String(unit || "").trim();
     const match = TIMER_UNIT_META.find((item) => item.pattern.test(normalized));
@@ -216,6 +232,19 @@
     }
   }
 
+  function persistWindowLogState() {
+    try {
+      const windowLogKeys = Object.keys(state.windowLogs || {});
+      if (windowLogKeys.length === 0) {
+        window.localStorage.removeItem(WINDOW_LOG_STORAGE_KEY);
+        return;
+      }
+
+      window.localStorage.setItem(WINDOW_LOG_STORAGE_KEY, JSON.stringify(state.windowLogs));
+    } catch (error) {
+      // Ignore storage failures so the rest of the app remains usable.
+    }
+  }
   function roundNumber(value, decimals) {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) {
@@ -249,20 +278,8 @@
     const safeFallbackValue = Number.isFinite(fallbackNumericValue) && fallbackNumericValue >= 0
       ? fallbackNumericValue
       : 0;
-    const draftValue = getMeasureDraftValue(habitId, dateKey);
-    if (draftValue !== undefined) {
-      const trimmedDraft = String(draftValue).trim();
-      if (!trimmedDraft) {
-        return hasEntryValue ? entryValue : safeFallbackValue;
-      }
 
-      const numericDraft = Number(trimmedDraft);
-      if (Number.isFinite(numericDraft) && numericDraft >= 0) {
-        return numericDraft;
-      }
-    }
-
-    return hasEntryValue ? entryValue : safeFallbackValue;
+    return roundNumber(Math.max(hasEntryValue ? entryValue : 0, safeFallbackValue), 4);
   }
 
   function convertSecondsToHabitValue(seconds, unit) {
@@ -294,7 +311,8 @@
         habitId: habit.id,
         loggedValueSnapshot: 0,
         running: false,
-        startedAtMs: 0
+        startedAtMs: 0,
+        windowKey: getPrimaryWindowKey(habit)
       };
       persistTimerState();
       return state.timers[timerKey];
@@ -308,6 +326,7 @@
     existingSession.startedAtMs = existingSession.running && Number.isFinite(existingSession.startedAtMs)
       ? Number(existingSession.startedAtMs)
       : 0;
+    existingSession.windowKey = String(existingSession.windowKey || getPrimaryWindowKey(habit)).trim() || getPrimaryWindowKey(habit);
 
     return existingSession;
   }
@@ -318,6 +337,255 @@
     return session && typeof session === "object" ? session : null;
   }
 
+  function getPrimaryWindowKey(habit) {
+    return getWindowKey(
+      habit ? (habit.primaryWindowStart || habit.windowStart) : "",
+      habit ? (habit.primaryWindowEnd || habit.windowEnd) : ""
+    );
+  }
+
+  function getAppearanceWindowKey(habit) {
+    return getWindowKey(habit && habit.windowStart, habit && habit.windowEnd);
+  }
+
+  function getHabitWindowSequence(habitLike) {
+    const baseHabit = habitLike && habitLike.id
+      ? (getReadBackend().getHabit(habitLike.id) || habitLike)
+      : habitLike;
+
+    if (!baseHabit) {
+      return [];
+    }
+
+    return [getPrimaryWindowKey(baseHabit)]
+      .concat(baseHabit.repeatWindows || [])
+      .map(parseWindowKey)
+      .filter(Boolean)
+      .sort(function (left, right) {
+        if (left.windowStart !== right.windowStart) {
+          return left.windowStart.localeCompare(right.windowStart);
+        }
+        return left.windowEnd.localeCompare(right.windowEnd);
+      })
+      .map(function (item) {
+        return item.key;
+      });
+  }
+
+  function getWindowLogKey(habitId, dateKey, windowKey) {
+    return `window-log::${dateKey}::${habitId}::${windowKey}`;
+  }
+
+  function getWindowLogValue(habitId, dateKey, windowKey) {
+    const numericValue = Number(state.windowLogs[getWindowLogKey(habitId, dateKey, windowKey)]);
+    return Number.isFinite(numericValue) && numericValue > 0 ? roundNumber(numericValue, 4) : 0;
+  }
+
+  function removeWindowLogsByPredicate(predicate) {
+    let changed = false;
+    Object.keys(state.windowLogs || {}).forEach(function (windowLogKey) {
+      if (!predicate(windowLogKey)) {
+        return;
+      }
+
+      delete state.windowLogs[windowLogKey];
+      changed = true;
+    });
+
+    if (changed) {
+      persistWindowLogState();
+    }
+  }
+
+  function clearWindowLogsForHabitDate(habitId, dateKey) {
+    const prefix = `window-log::${dateKey}::${habitId}::`;
+    removeWindowLogsByPredicate(function (windowLogKey) {
+      return windowLogKey.indexOf(prefix) === 0;
+    });
+  }
+
+  function clearWindowLogsForHabit(habitId) {
+    const marker = `::${habitId}::`;
+    removeWindowLogsByPredicate(function (windowLogKey) {
+      return windowLogKey.indexOf(marker) !== -1;
+    });
+  }
+
+  function readWindowLogAllocations(habitId, dateKey, seedTotal) {
+    const baseHabit = getReadBackend().getHabit(habitId);
+    const sequence = getHabitWindowSequence(baseHabit);
+    const existingEntry = getReadBackend().getEntryForDate(habitId, dateKey);
+    const allocations = {};
+
+    const hasEntryAllocations = Boolean(existingEntry && existingEntry.windowAllocations && typeof existingEntry.windowAllocations === "object");
+    if (hasEntryAllocations) {
+      sequence.forEach(function (windowKey) {
+        const allocation = Number(existingEntry.windowAllocations[windowKey]);
+        if (Number.isFinite(allocation) && allocation > 0) {
+          allocations[windowKey] = roundNumber(allocation, 4);
+        }
+      });
+    }
+
+    const hasStoredAllocations = Object.keys(allocations).length > 0;
+    const hasLegacyAllocations = !hasStoredAllocations && sequence.some(function (windowKey) {
+      return getWindowLogValue(habitId, dateKey, windowKey) > 0;
+    });
+
+    if (!hasStoredAllocations && hasLegacyAllocations) {
+      sequence.forEach(function (windowKey) {
+        const allocation = getWindowLogValue(habitId, dateKey, windowKey);
+        if (allocation > 0) {
+          allocations[windowKey] = allocation;
+        }
+      });
+    } else if (!hasStoredAllocations && !hasLegacyAllocations && sequence[0] && seedTotal > 0) {
+      allocations[sequence[0]] = roundNumber(seedTotal, 4);
+    }
+
+    return {
+      allocations: allocations,
+      sequence: sequence
+    };
+  }
+
+  function writeWindowLogAllocations(habitId, dateKey, allocations) {
+    const prefix = `window-log::${dateKey}::${habitId}::`;
+    Object.keys(state.windowLogs || {}).forEach(function (windowLogKey) {
+      if (windowLogKey.indexOf(prefix) === 0) {
+        delete state.windowLogs[windowLogKey];
+      }
+    });
+
+    Object.keys(allocations || {}).forEach(function (windowKey) {
+      const nextValue = roundNumber(allocations[windowKey], 4);
+      if (nextValue > 0) {
+        state.windowLogs[getWindowLogKey(habitId, dateKey, windowKey)] = nextValue;
+      }
+    });
+
+    persistWindowLogState();
+  }
+
+  function getStoredWindowValueForHabit(habit, dateKey, windowKey) {
+    if (!habit || habit.type !== "measurable") {
+      return 0;
+    }
+
+    const existingEntry = getReadBackend().getEntryForDate(habit.id, dateKey);
+    const seedTotal = roundNumber(Math.max(0, Number(existingEntry && existingEntry.value) || 0), 4);
+    const allocationState = readWindowLogAllocations(habit.id, dateKey, seedTotal);
+    const sequence = allocationState.sequence;
+    if (!sequence.length) {
+      return 0;
+    }
+
+    const resolvedWindowKey = sequence.includes(windowKey) ? windowKey : sequence[0];
+    return roundNumber(allocationState.allocations[resolvedWindowKey] || 0, 4);
+  }
+
+  function buildStoredWindowValueUpdate(habit, dateKey, windowKey, nextWindowValue) {
+    const existingEntry = getReadBackend().getEntryForDate(habit.id, dateKey);
+    const seedTotal = roundNumber(Math.max(0, Number(existingEntry && existingEntry.value) || 0), 4);
+    const allocationState = readWindowLogAllocations(habit.id, dateKey, seedTotal);
+    const sequence = allocationState.sequence;
+    const safeNextWindowValue = roundNumber(Math.max(0, Number(nextWindowValue) || 0), 4);
+
+    if (!sequence.length) {
+      return {
+        allocations: {},
+        nextTotal: safeNextWindowValue,
+        resolvedWindowKey: ""
+      };
+    }
+
+    const resolvedWindowKey = sequence.includes(windowKey) ? windowKey : sequence[0];
+    const allocations = { ...allocationState.allocations };
+    if (safeNextWindowValue > 0) {
+      allocations[resolvedWindowKey] = safeNextWindowValue;
+    } else {
+      delete allocations[resolvedWindowKey];
+    }
+
+    const nextTotal = roundNumber(Object.keys(allocations).reduce(function (sum, allocationWindowKey) {
+      return sum + roundNumber(allocations[allocationWindowKey] || 0, 4);
+    }, 0), 4);
+
+    return {
+      allocations: allocations,
+      nextTotal: nextTotal,
+      resolvedWindowKey: resolvedWindowKey
+    };
+  }
+
+  function applyWindowLoggedDelta(habitId, dateKey, windowKey, previousTotal, nextTotal) {
+    const safePreviousTotal = roundNumber(Math.max(0, Number(previousTotal) || 0), 4);
+    const safeNextTotal = roundNumber(Math.max(0, Number(nextTotal) || 0), 4);
+
+    if (safeNextTotal <= 0) {
+      clearWindowLogsForHabitDate(habitId, dateKey);
+      return;
+    }
+
+    const allocationState = readWindowLogAllocations(habitId, dateKey, safePreviousTotal);
+    const sequence = allocationState.sequence;
+    const allocations = allocationState.allocations;
+    if (!sequence.length) {
+      return;
+    }
+
+    const resolvedWindowKey = sequence.includes(windowKey) ? windowKey : sequence[0];
+    const adjustmentOrder = [resolvedWindowKey].concat(sequence.filter(function (item) {
+      return item !== resolvedWindowKey;
+    }).slice().reverse());
+    const delta = roundNumber(safeNextTotal - safePreviousTotal, 4);
+
+    if (delta > 0) {
+      allocations[resolvedWindowKey] = roundNumber((allocations[resolvedWindowKey] || 0) + delta, 4);
+    } else if (delta < 0) {
+      let remainingReduction = roundNumber(-delta, 4);
+      adjustmentOrder.forEach(function (allocationWindowKey) {
+        if (remainingReduction <= 0) {
+          return;
+        }
+
+        const currentAllocation = roundNumber(allocations[allocationWindowKey] || 0, 4);
+        const reduction = Math.min(currentAllocation, remainingReduction);
+        const nextAllocation = roundNumber(currentAllocation - reduction, 4);
+        if (nextAllocation > 0) {
+          allocations[allocationWindowKey] = nextAllocation;
+        } else {
+          delete allocations[allocationWindowKey];
+        }
+        remainingReduction = roundNumber(remainingReduction - reduction, 4);
+      });
+    }
+
+    let allocatedTotal = roundNumber(Object.keys(allocations).reduce(function (sum, allocationWindowKey) {
+      return sum + roundNumber(allocations[allocationWindowKey] || 0, 4);
+    }, 0), 4);
+    let excessAllocation = roundNumber(allocatedTotal - safeNextTotal, 4);
+
+    if (excessAllocation > 0) {
+      adjustmentOrder.forEach(function (allocationWindowKey) {
+        if (excessAllocation <= 0) {
+          return;
+        }
+
+        const currentAllocation = roundNumber(allocations[allocationWindowKey] || 0, 4);
+        const reduction = Math.min(currentAllocation, excessAllocation);
+        const nextAllocation = roundNumber(currentAllocation - reduction, 4);
+        if (nextAllocation > 0) {
+          allocations[allocationWindowKey] = nextAllocation;
+        } else {
+          delete allocations[allocationWindowKey];
+        }
+        excessAllocation = roundNumber(excessAllocation - reduction, 4);
+      });
+    }
+
+    writeWindowLogAllocations(habitId, dateKey, allocations);
+  }
   function syncTimerSnapshot(habitId, dateKey, value) {
     const session = getExistingTimerSession(habitId, dateKey);
     if (!session) {
@@ -413,6 +681,21 @@
     );
   }
 
+  function getWindowLoggedValueForHabit(habit, dateKey, windowKey, nowMs) {
+    if (!habit || habit.type !== "measurable") {
+      return 0;
+    }
+
+    let attributedValue = getStoredWindowValueForHabit(habit, dateKey, windowKey);
+    const session = supportsHabitTimer(habit) ? getExistingTimerSession(habit.id, dateKey) : null;
+
+    if (session && String(session.windowKey || "") === String(windowKey || "")) {
+      attributedValue += convertSecondsToHabitValue(getCurrentSessionSeconds(session, nowMs), habit.unit);
+    }
+
+    return roundNumber(attributedValue, 4);
+  }
+
   function getLoggedWindowMinutes(windowSection, dateKey, nowMs) {
     return roundNumber(
       (windowSection.habits || []).reduce(function (totalMinutes, habit) {
@@ -421,12 +704,16 @@
           return totalMinutes;
         }
 
-        return totalMinutes + (getLiveMeasuredValue(habit, dateKey, nowMs) * unitMultiplier);
+        return totalMinutes + (getWindowLoggedValueForHabit(
+          habit,
+          dateKey,
+          getAppearanceWindowKey(habit) || windowSection.windowKey,
+          nowMs
+        ) * unitMultiplier);
       }, 0),
       2
     );
   }
-
   function getTargetWindowMinutes(windowSection) {
     return roundNumber(
       (windowSection.habits || []).reduce(function (totalMinutes, habit) {
@@ -435,7 +722,7 @@
           return totalMinutes;
         }
 
-        return totalMinutes + (Number(habit.target) || 0) * unitMultiplier;
+        return totalMinutes + (getHabitAppearanceTargetValue(habit) * unitMultiplier);
       }, 0),
       2
     );
@@ -458,6 +745,7 @@
     );
     const loggedMinutes = getLoggedWindowMinutes(windowSection, state.selectedDateKey, nowMs);
     const targetMinutes = getTargetWindowMinutes(windowSection);
+    const unplannedMinutes = Math.max(0, windowDurationMinutes - targetMinutes);
     const unusedMinutes = isClosed
       ? Math.max(0, windowDurationMinutes - loggedMinutes)
       : Math.max(0, elapsedMinutes - loggedMinutes);
@@ -469,16 +757,20 @@
     }, 0);
     const totalHabits = (windowSection.habits || []).length;
 
+    const pendingCount = Math.max(0, totalHabits - doneCount);
+
     return {
       doneCount: doneCount,
       elapsedBarWidth: `${Math.round(windowDurationMinutes > 0 ? (elapsedMinutes / windowDurationMinutes) * 100 : 0)}%`,
       elapsedCopy: isClosed
         ? `${formatDurationLabel(windowDurationMinutes)} elapsed · window closed`
         : `${formatDurationLabel(elapsedMinutes)} elapsed of ${formatDurationLabel(windowDurationMinutes)}`,
+      habitSummaryText: `${totalHabits} total · ${doneCount} done · ${pendingCount} pending`,
       loggedText: formatDurationLabel(loggedMinutes),
-      pendingCount: Math.max(0, totalHabits - doneCount),
+      pendingCount: pendingCount,
       targetText: formatDurationLabel(targetMinutes),
       totalHabits: totalHabits,
+      unplannedText: formatDurationLabel(unplannedMinutes),
       unusedLabel: isClosed ? "Unused after close" : "Unlogged so far",
       unusedText: formatDurationLabel(unusedMinutes)
     };
@@ -490,7 +782,7 @@
     const sessionSeconds = getCurrentSessionSeconds(session, nowMs);
     const liveValue = roundNumber(storedValue + convertSecondsToHabitValue(sessionSeconds, habit.unit), 4);
     const liveSeconds = convertHabitValueToSeconds(storedValue, habit.unit) + sessionSeconds;
-    const numericTarget = Number(habit.target);
+    const numericTarget = getHabitDailyTargetValue(habit);
     const safeTarget = Number.isFinite(numericTarget) && numericTarget > 0 ? numericTarget : 0;
     const progressRatio = safeTarget > 0 ? Math.max(0, Math.min(1, liveValue / safeTarget)) : 0;
 
@@ -510,7 +802,7 @@
     if (sessionSeconds > 0) {
       return {
         actionLabel: "Continue",
-        canPause: false,
+        canPause: true,
         canReset: true,
         clockText: formatTimerClock(liveSeconds),
         progressText: buildTimerProgressCopy(habit, liveValue, safeTarget),
@@ -575,30 +867,26 @@
       }
 
       const metrics = getWindowSummaryMetrics(windowSection, boardContext);
-      const totalNode = document.querySelector(`[data-window-total="${summaryKey}"]`);
-      const doneNode = document.querySelector(`[data-window-done="${summaryKey}"]`);
-      const pendingNode = document.querySelector(`[data-window-pending="${summaryKey}"]`);
+      const habitSummaryNode = document.querySelector(`[data-window-habit-summary="${summaryKey}"]`);
       const targetNode = document.querySelector(`[data-window-target="${summaryKey}"]`);
       const loggedNode = document.querySelector(`[data-window-logged="${summaryKey}"]`);
+      const unplannedNode = document.querySelector(`[data-window-unplanned="${summaryKey}"]`);
       const unusedLabelNode = document.querySelector(`[data-window-unused-label="${summaryKey}"]`);
       const unusedValueNode = document.querySelector(`[data-window-unused-value="${summaryKey}"]`);
       const elapsedFillNode = document.querySelector(`[data-window-elapsed-fill="${summaryKey}"]`);
       const elapsedCopyNode = document.querySelector(`[data-window-elapsed-copy="${summaryKey}"]`);
 
-      if (totalNode) {
-        totalNode.textContent = String(metrics.totalHabits);
-      }
-      if (doneNode) {
-        doneNode.textContent = String(metrics.doneCount);
-      }
-      if (pendingNode) {
-        pendingNode.textContent = String(metrics.pendingCount);
+      if (habitSummaryNode) {
+        habitSummaryNode.textContent = metrics.habitSummaryText;
       }
       if (targetNode) {
         targetNode.textContent = metrics.targetText;
       }
       if (loggedNode) {
         loggedNode.textContent = metrics.loggedText;
+      }
+      if (unplannedNode) {
+        unplannedNode.textContent = metrics.unplannedText;
       }
       if (unusedLabelNode) {
         unusedLabelNode.textContent = metrics.unusedLabel;
@@ -670,7 +958,7 @@
     refreshVisibleTimerDisplays();
   }
 
-  function startHabitTimer(habitId) {
+  function startHabitTimer(habitId, windowKey) {
     const habit = getReadBackend().getHabit(habitId);
     if (!habit || !supportsHabitTimer(habit)) {
       return;
@@ -687,6 +975,7 @@
     );
     session.running = true;
     session.startedAtMs = Date.now();
+    session.windowKey = String(windowKey || getPrimaryWindowKey(habit)).trim() || getPrimaryWindowKey(habit);
     persistTimerState();
     syncTimerTicker();
     render();
@@ -699,17 +988,20 @@
     }
 
     const session = getTimerSession(habit, state.selectedDateKey);
-    if (!session.running) {
+    if (!session.running && session.bufferSeconds <= 0) {
       return;
     }
 
+    const resolvedWindowKey = session.windowKey || getPrimaryWindowKey(habit);
+    const existingEntry = getReadBackend().getEntryForDate(habit.id, state.selectedDateKey);
+    const previousTotal = roundNumber(Math.max(0, Number(existingEntry && existingEntry.value) || 0), 4);
+    const previousAllocations = { ...readWindowLogAllocations(habit.id, state.selectedDateKey, previousTotal).allocations };
+    const previousSnapshot = roundNumber(session.loggedValueSnapshot, 4);
+    const previousWindowValue = getStoredWindowValueForHabit(habit, state.selectedDateKey, resolvedWindowKey);
     const sessionSeconds = getCurrentSessionSeconds(session, Date.now());
     session.running = false;
     session.startedAtMs = 0;
-    session.bufferSeconds = sessionSeconds;
-    persistTimerState();
     syncTimerTicker();
-    render();
 
     if (sessionSeconds <= 0) {
       session.bufferSeconds = 0;
@@ -718,25 +1010,39 @@
       return;
     }
 
-    const nextValue = roundNumber(
-      getStoredMeasureValue(habitId, state.selectedDateKey, session.loggedValueSnapshot) +
-        convertSecondsToHabitValue(sessionSeconds, habit.unit),
+    const nextWindowValue = roundNumber(
+      previousWindowValue + convertSecondsToHabitValue(sessionSeconds, habit.unit),
       4
     );
+    const update = buildStoredWindowValueUpdate(habit, state.selectedDateKey, resolvedWindowKey, nextWindowValue);
+
+    session.bufferSeconds = 0;
+    session.loggedValueSnapshot = update.nextTotal;
+    writeWindowLogAllocations(habitId, state.selectedDateKey, update.allocations);
+    persistTimerState();
+    render();
 
     try {
-      await Promise.resolve(getWriteBackend().saveEntry({
-        habitId: habitId,
-        dateKey: state.selectedDateKey,
-        status: "logged",
-        value: nextValue
-      }));
+      if (update.nextTotal > 0) {
+        await Promise.resolve(getWriteBackend().saveEntry({
+          habitId: habitId,
+          dateKey: state.selectedDateKey,
+          status: "logged",
+          value: update.nextTotal,
+          windowAllocations: update.allocations
+        }));
+      } else {
+        await Promise.resolve(getWriteBackend().clearEntry(habitId, state.selectedDateKey));
+      }
+
       clearMeasureDraftValue(habitId, state.selectedDateKey);
-      session.bufferSeconds = 0;
-      session.loggedValueSnapshot = nextValue;
+      clearWindowLogsForHabitDate(habitId, state.selectedDateKey);
       persistTimerState();
       render();
     } catch (error) {
+      session.bufferSeconds = sessionSeconds;
+      session.loggedValueSnapshot = previousSnapshot;
+      writeWindowLogAllocations(habitId, state.selectedDateKey, previousAllocations);
       persistTimerState();
       render();
       throw error;
@@ -757,7 +1063,6 @@
     syncTimerTicker();
     render();
   }
-
   function getLocalHabitCount() {
     return localBackend ? localBackend.listHabits().length : 0;
   }
@@ -952,40 +1257,125 @@
     return `${formatTime(parsed.windowStart)} - ${formatTime(parsed.windowEnd)}`;
   }
 
-  function getEditorRepeatWindows() {
+  function compareWindowKeys(leftWindowKey, rightWindowKey) {
+    const leftWindow = parseWindowKey(leftWindowKey);
+    const rightWindow = parseWindowKey(rightWindowKey);
+    if (!leftWindow || !rightWindow) {
+      return String(leftWindowKey || "").localeCompare(String(rightWindowKey || ""));
+    }
+    if (leftWindow.windowStart !== rightWindow.windowStart) {
+      return leftWindow.windowStart.localeCompare(rightWindow.windowStart);
+    }
+    return leftWindow.windowEnd.localeCompare(rightWindow.windowEnd);
+  }
+
+  function getEditorRepeatWindowConfigs() {
     if (!elements.habitRepeatWindowList) {
       return [];
     }
 
     return Array.from(elements.habitRepeatWindowList.querySelectorAll("[data-repeat-window]"))
-      .map((node) => node.getAttribute("data-repeat-window"))
-      .filter(Boolean);
+      .map(function (node) {
+        const targetInput = node.querySelector("[data-repeat-target-input]");
+        return {
+          target: targetInput
+            ? String(targetInput.value || "").trim()
+            : String(node.getAttribute("data-repeat-target") || "").trim(),
+          windowKey: String(node.getAttribute("data-repeat-window") || "").trim()
+        };
+      })
+      .filter(function (config) {
+        return Boolean(config.windowKey);
+      })
+      .sort(function (left, right) {
+        return compareWindowKeys(left.windowKey, right.windowKey);
+      });
   }
 
-  function renderEditorRepeatWindows(windowKeys) {
+  function getEditorRepeatWindows() {
+    return getEditorRepeatWindowConfigs().map(function (config) {
+      return config.windowKey;
+    });
+  }
+
+  function getEditorRepeatWindowTargets() {
+    if (elements.habitType && elements.habitType.value !== "measurable") {
+      return {};
+    }
+
+    return getEditorRepeatWindowConfigs().reduce(function (targets, config) {
+      const numericTarget = Number(config.target);
+      if (Number.isFinite(numericTarget) && numericTarget > 0) {
+        targets[config.windowKey] = numericTarget;
+      }
+      return targets;
+    }, {});
+  }
+
+  function renderEditorRepeatWindows(windowConfigs) {
     if (!elements.habitRepeatWindowList) {
       return;
     }
 
-    const uniqueWindowKeys = Array.from(new Set((windowKeys || []).filter(Boolean)));
-    if (uniqueWindowKeys.length === 0) {
+    const isMeasurable = elements.habitType && elements.habitType.value === "measurable";
+    const configMap = new Map();
+    (windowConfigs || []).forEach(function (item) {
+      const windowKey = typeof item === "string" ? item : item && item.windowKey;
+      const parsed = parseWindowKey(windowKey);
+      if (!parsed) {
+        return;
+      }
+
+      const rawTarget = item && typeof item === "object" && item.target != null
+        ? String(item.target).trim()
+        : "";
+      configMap.set(parsed.key, {
+        target: rawTarget,
+        windowKey: parsed.key
+      });
+    });
+
+    const uniqueWindowConfigs = Array.from(configMap.values()).sort(function (left, right) {
+      return compareWindowKeys(left.windowKey, right.windowKey);
+    });
+
+    if (uniqueWindowConfigs.length === 0) {
       elements.habitRepeatWindowList.innerHTML = '<div class="repeat-window-empty">No repetition windows yet.</div>';
       return;
     }
 
-    elements.habitRepeatWindowList.innerHTML = uniqueWindowKeys
-      .map((windowKey) => `
-        <div class="repeat-window-chip" data-repeat-window="${escapeHtml(windowKey)}">
-          <span>${escapeHtml(formatWindowKeyLabel(windowKey))}</span>
-          <button type="button" data-remove-repeat-window="${escapeHtml(windowKey)}">Remove</button>
-        </div>
-      `)
+    elements.habitRepeatWindowList.innerHTML = uniqueWindowConfigs
+      .map(function (config, index) {
+        const helperCopy = isMeasurable
+          ? "Shared daily value and score, with its own target for this window."
+          : "Shares the same checkbox result for the day.";
+        return `
+          <div class="repeat-window-row ${isMeasurable ? "with-target" : "without-target"}" data-repeat-window="${escapeHtml(config.windowKey)}" data-repeat-target="${escapeHtml(config.target)}">
+            <div class="repeat-window-main">
+              <span class="repeat-window-badge">Rep ${index + 2}</span>
+              <div class="repeat-window-copy">
+                <strong>${escapeHtml(formatWindowKeyLabel(config.windowKey))}</strong>
+                <span>${escapeHtml(helperCopy)}</span>
+              </div>
+            </div>
+            ${isMeasurable ? `
+              <label class="repeat-window-target">
+                <span>Target in this rep</span>
+                <input type="number" min="0" step="any" value="${escapeHtml(config.target)}" placeholder="0" data-repeat-target-input="${escapeHtml(config.windowKey)}" />
+              </label>
+            ` : ""}
+            <button type="button" class="repeat-window-remove" data-remove-repeat-window="${escapeHtml(config.windowKey)}">Remove</button>
+          </div>
+        `;
+      })
       .join("");
   }
 
   function removeEditorRepeatWindow(windowKeyToRemove) {
     renderEditorRepeatWindows(
-      getEditorRepeatWindows().filter((windowKey) => windowKey !== windowKeyToRemove)
+      getEditorRepeatWindowConfigs().filter(function (config) {
+        return config.windowKey !== windowKeyToRemove;
+      })
     );
     refreshRepeatWindowOptions();
   }
@@ -1003,17 +1393,7 @@
         });
     });
 
-    return Array.from(options.values()).sort(function (left, right) {
-      const leftWindow = parseWindowKey(left);
-      const rightWindow = parseWindowKey(right);
-      if (!leftWindow || !rightWindow) {
-        return String(left || "").localeCompare(String(right || ""));
-      }
-      if (leftWindow.windowStart !== rightWindow.windowStart) {
-        return leftWindow.windowStart.localeCompare(rightWindow.windowStart);
-      }
-      return leftWindow.windowEnd.localeCompare(rightWindow.windowEnd);
-    });
+    return Array.from(options.values()).sort(compareWindowKeys);
   }
 
   function refreshRepeatWindowOptions() {
@@ -1022,9 +1402,14 @@
     }
 
     const currentWindowKey = getWindowKey(elements.habitWindowStart.value, elements.habitWindowEnd.value);
-    const selectedWindowKeys = getEditorRepeatWindows().filter((windowKey) => windowKey !== currentWindowKey);
-    if (selectedWindowKeys.length !== getEditorRepeatWindows().length) {
-      renderEditorRepeatWindows(selectedWindowKeys);
+    const selectedConfigs = getEditorRepeatWindowConfigs().filter(function (config) {
+      return config.windowKey !== currentWindowKey;
+    });
+    const selectedWindowKeys = selectedConfigs.map(function (config) {
+      return config.windowKey;
+    });
+    if (selectedConfigs.length !== getEditorRepeatWindowConfigs().length) {
+      renderEditorRepeatWindows(selectedConfigs);
     }
 
     const uniqueWindowKeys = collectUniqueWindowOptions();
@@ -1061,9 +1446,11 @@
     }
 
     const nextWindowKey = elements.habitRepeatWindowSelect.value;
-    const selectedWindowKeys = getEditorRepeatWindows();
-    if (!selectedWindowKeys.includes(nextWindowKey)) {
-      renderEditorRepeatWindows(selectedWindowKeys.concat(nextWindowKey));
+    const selectedConfigs = getEditorRepeatWindowConfigs();
+    if (!selectedConfigs.some(function (config) {
+      return config.windowKey === nextWindowKey;
+    })) {
+      renderEditorRepeatWindows(selectedConfigs.concat([{ windowKey: nextWindowKey, target: "" }]));
     }
 
     elements.habitRepeatWindowSelect.value = "";
@@ -1177,18 +1564,64 @@
   function updateTypeUi() {
     const type = elements.habitType.value;
     const isMeasurable = type === "measurable";
+    const repeatWindowConfigs = getEditorRepeatWindowConfigs();
     elements.habitTargetLabel.textContent = isMeasurable
-      ? "Daily target"
+      ? "Primary window target"
       : "Daily target (usually 1)";
     elements.habitUnitWrap.style.display = isMeasurable ? "grid" : "none";
     if (!isMeasurable) {
       elements.habitUnit.value = "";
     }
+    renderEditorRepeatWindows(repeatWindowConfigs);
   }
 
-  function buildTargetText(habit) {
+  function getHabitDailyTargetValue(habit) {
+    const backend = getReadBackend();
+    if (backend && typeof backend.getHabitDailyTarget === "function") {
+      const dailyTarget = Number(backend.getHabitDailyTarget(habit));
+      return Number.isFinite(dailyTarget) && dailyTarget > 0 ? dailyTarget : 0;
+    }
+
+    const fallbackTarget = Number(habit && habit.target);
+    return Number.isFinite(fallbackTarget) && fallbackTarget > 0 ? fallbackTarget : 0;
+  }
+
+  function getHabitAppearanceTargetValue(habit) {
+    if (!habit) {
+      return 0;
+    }
+
+    const directAppearanceTarget = Number(habit.appearanceTarget);
+    if (Number.isFinite(directAppearanceTarget) && directAppearanceTarget >= 0) {
+      return directAppearanceTarget;
+    }
+
+    const backend = getReadBackend();
+    if (backend && typeof backend.getHabitAppearanceTarget === "function") {
+      const appearanceWindowKey = getAppearanceWindowKey(habit) || getPrimaryWindowKey(habit);
+      const appearanceTarget = Number(backend.getHabitAppearanceTarget(habit, appearanceWindowKey));
+      return Number.isFinite(appearanceTarget) && appearanceTarget >= 0 ? appearanceTarget : 0;
+    }
+
+    const fallbackTarget = Number(habit.target);
+    return Number.isFinite(fallbackTarget) && fallbackTarget > 0 ? fallbackTarget : 0;
+  }
+
+  function buildTargetText(habit, options) {
     if (habit.type === "measurable") {
-      return `${habit.target} ${habit.unit ? `${habit.unit} / day` : "units / day"}`;
+      const unitLabel = String(habit.unit || "").trim() || "units";
+      const dailyTarget = getHabitDailyTargetValue(habit);
+      const appearanceTarget = getHabitAppearanceTargetValue(habit);
+      const isAppearanceScope = options && options.scope === "appearance";
+
+      if (isAppearanceScope && Math.abs(dailyTarget - appearanceTarget) > 0.0001) {
+        const appearanceCopy = appearanceTarget > 0
+          ? `${formatMeasureValue(appearanceTarget)} ${unitLabel} in this window`
+          : "No window target";
+        return `${appearanceCopy} · ${formatMeasureValue(dailyTarget)} ${unitLabel} / day`;
+      }
+
+      return `${formatMeasureValue(dailyTarget)} ${unitLabel} / day`;
     }
     return `${habit.target} completion / day`;
   }
@@ -1288,6 +1721,9 @@
     } else if (isFileProtocol()) {
       elements.backendStatus.textContent = "Local mode only";
       elements.backendMeta.textContent = "Google Sheets sign-in needs http://localhost, not file://. Open this app through a small local server to connect Google.";
+    } else if (status.needsReconnect) {
+      elements.backendStatus.textContent = "Reconnect Google Sheets";
+      elements.backendMeta.textContent = status.error || "Your Google session expired. Connect again, then retry the save.";
     } else if (status.error) {
       elements.backendStatus.textContent = "Google Sheets needs attention";
       elements.backendMeta.textContent = status.error;
@@ -1323,8 +1759,8 @@
         : "Save locally for now";
     }
 
-    elements.connectButton.disabled = isFileProtocol() || !status.configured || !status.ready || status.signedIn || status.syncing;
-    elements.syncButton.disabled = isFileProtocol() || !status.signedIn || status.syncing;
+    elements.connectButton.disabled = isFileProtocol() || !status.configured || !status.ready || (status.signedIn && !status.needsReconnect) || status.syncing;
+    elements.syncButton.disabled = isFileProtocol() || !status.signedIn || status.syncing || status.needsReconnect;
     elements.signOutButton.disabled = !status.signedIn || status.syncing;
   }
 
@@ -1434,11 +1870,12 @@
             const visualState = getHabitVisualState(habit, progress, boardContext);
             const appearanceMeta = getHabitAppearanceMeta(habit);
             const statusClass = `status-${visualState.statusTone}`;
-            const targetText = buildTargetText(habit);
-            const draftValue = getMeasureDraftValue(habit.id, state.selectedDateKey);
+            const targetText = buildTargetText(habit, { scope: "appearance" });
+            const appearanceWindowKey = getAppearanceWindowKey(habit) || windowSection.windowKey;
+            const draftValue = getMeasureDraftValue(habit.id, state.selectedDateKey, appearanceWindowKey);
             const measureValue = draftValue !== undefined
               ? draftValue
-              : (progress.value === "" ? "0" : String(progress.value));
+              : formatMeasureValue(getStoredWindowValueForHabit(habit, state.selectedDateKey, appearanceWindowKey));
             const progressWidth = `${Math.round(progress.progressRatio * 100)}%`;
             const timerMarkup = supportsHabitTimer(habit)
               ? (function () {
@@ -1516,7 +1953,7 @@
                 `;
 
             return `
-              <article class="track-card ${statusClass}" data-card-key="${escapeHtml(cardKey)}" data-habit-id="${escapeHtml(habit.id)}">
+              <article class="track-card ${statusClass}" data-card-key="${escapeHtml(cardKey)}" data-habit-id="${escapeHtml(habit.id)}" data-window-key="${escapeHtml(windowSection.windowKey)}">
                 <div class="track-card-head">
                   <div>
                     <div class="track-card-title">${escapeHtml(habit.name)}</div>
@@ -1562,27 +1999,22 @@
                   </div>
                 </div>
                 <div class="category-meta">
-                  <div class="category-count">${escapeHtml(formatTime(windowSection.windowStart))} - ${escapeHtml(formatTime(windowSection.windowEnd))}</div>
                   <span class="category-toggle when-closed" aria-hidden="true">+</span>
                   <span class="category-toggle when-open" aria-hidden="true">-</span>
                 </div>
               </div>
               <div class="window-summary-stats">
                 <div class="window-summary-stat">
-                  <span class="window-summary-label">Habits</span>
-                  <strong data-window-total="${escapeHtml(windowSection.windowKey)}">${windowMetrics.totalHabits}</strong>
-                </div>
-                <div class="window-summary-stat">
-                  <span class="window-summary-label">Done</span>
-                  <strong data-window-done="${escapeHtml(windowSection.windowKey)}">${windowMetrics.doneCount}</strong>
-                </div>
-                <div class="window-summary-stat">
-                  <span class="window-summary-label">Pending</span>
-                  <strong data-window-pending="${escapeHtml(windowSection.windowKey)}">${windowMetrics.pendingCount}</strong>
+                  <span class="window-summary-label">Habit progress</span>
+                  <strong class="window-summary-copy" data-window-habit-summary="${escapeHtml(windowSection.windowKey)}">${escapeHtml(windowMetrics.habitSummaryText)}</strong>
                 </div>
                 <div class="window-summary-stat">
                   <span class="window-summary-label">Targeted time</span>
                   <strong data-window-target="${escapeHtml(windowSection.windowKey)}">${escapeHtml(windowMetrics.targetText)}</strong>
+                </div>
+                <div class="window-summary-stat">
+                  <span class="window-summary-label">Unplanned time</span>
+                  <strong data-window-unplanned="${escapeHtml(windowSection.windowKey)}">${escapeHtml(windowMetrics.unplannedText)}</strong>
                 </div>
                 <div class="window-summary-stat">
                   <span class="window-summary-label">Time logged</span>
@@ -1689,7 +2121,13 @@
     elements.habitWindowStart.value = habit.windowStart;
     elements.habitWindowEnd.value = habit.windowEnd;
     elements.habitNotes.value = habit.notes;
-    renderEditorRepeatWindows(habit.repeatWindows || []);
+    renderEditorRepeatWindows((habit.repeatWindows || []).map(function (windowKey) {
+      const repeatTarget = habit.repeatWindowTargets && habit.repeatWindowTargets[windowKey];
+      return {
+        target: repeatTarget == null ? "" : String(repeatTarget),
+        windowKey: windowKey
+      };
+    }));
     refreshRepeatWindowOptions();
     setSelectedDays(habit.activeDays);
     updateTypeUi();
@@ -1697,6 +2135,12 @@
 
   function ensureWritable(actionText) {
     const status = googleBackend.getStatus();
+
+    if (status.needsReconnect) {
+      window.alert(status.error || "Google session expired. Connect Google Sheets again, then retry.");
+      elements.connectButton.focus();
+      return false;
+    }
 
     if (status.signedIn) {
       return true;
@@ -1726,40 +2170,53 @@
     return false;
   }
 
-  async function saveMeasuredHabit(habitId, rawValue) {
+  function resolveWritableHabit(habitId, writeBackend) {
+    if (!habitId) {
+      return null;
+    }
+
+    return (writeBackend && typeof writeBackend.getHabit === "function" ? writeBackend.getHabit(habitId) : null)
+      || getReadBackend().getHabit(habitId)
+      || null;
+  }
+
+  async function saveMeasuredHabit(habitId, rawValue, windowKey) {
     if (!ensureWritable("saving day entries")) {
       return;
     }
 
     const writeBackend = getWriteBackend();
-    const habit = writeBackend.getHabit(habitId) || getReadBackend().getHabit(habitId);
+    const habit = resolveWritableHabit(habitId, writeBackend);
     if (!habit) {
       return;
     }
 
+    const resolvedWindowKey = String(windowKey || getPrimaryWindowKey(habit)).trim() || getPrimaryWindowKey(habit);
     const textValue = String(rawValue || "").trim();
-    if (!textValue) {
-      await Promise.resolve(writeBackend.clearEntry(habitId, state.selectedDateKey));
-      clearMeasureDraftValue(habitId, state.selectedDateKey);
-      syncTimerSnapshot(habitId, state.selectedDateKey, 0);
-      render();
-      return;
-    }
+    const nextWindowValue = textValue ? Number(textValue) : 0;
 
-    const numericValue = Number(textValue);
-    if (!Number.isFinite(numericValue) || numericValue < 0) {
+    if (textValue && (!Number.isFinite(nextWindowValue) || nextWindowValue < 0)) {
       window.alert("Please enter a valid non-negative number.");
       return;
     }
 
-    await Promise.resolve(writeBackend.saveEntry({
-      habitId: habitId,
-      dateKey: state.selectedDateKey,
-      status: "logged",
-      value: numericValue
-    }));
+    const update = buildStoredWindowValueUpdate(habit, state.selectedDateKey, resolvedWindowKey, nextWindowValue);
+
+    if (update.nextTotal > 0) {
+      await Promise.resolve(writeBackend.saveEntry({
+        habitId: habitId,
+        dateKey: state.selectedDateKey,
+        status: "logged",
+        value: update.nextTotal,
+        windowAllocations: update.allocations
+      }));
+    } else {
+      await Promise.resolve(writeBackend.clearEntry(habitId, state.selectedDateKey));
+    }
+
+    clearWindowLogsForHabitDate(habitId, state.selectedDateKey);
     clearMeasureDraftValue(habitId, state.selectedDateKey);
-    syncTimerSnapshot(habitId, state.selectedDateKey, numericValue);
+    syncTimerSnapshot(habitId, state.selectedDateKey, update.nextTotal);
     render();
   }
 
@@ -1774,7 +2231,6 @@
     refreshVisibleWindowSummaries();
     refreshVisibleTimerDisplays();
   }
-
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -1799,7 +2255,8 @@
       windowEnd: elements.habitWindowEnd.value,
       activeDays: activeDays,
       notes: elements.habitNotes.value,
-      repeatWindows: getEditorRepeatWindows()
+      repeatWindows: getEditorRepeatWindows(),
+      repeatWindowTargets: getEditorRepeatWindowTargets()
     };
 
     if (!habitInput.name.trim()) {
@@ -1886,11 +2343,14 @@
 
     const action = button.getAttribute("data-action");
     const habitId = button.getAttribute("data-habit-id");
+    const card = button.closest("[data-card-key]");
+    const windowKey = card ? (card.getAttribute("data-window-key") || "") : "";
     const writeBackend = getWriteBackend();
+    const habit = resolveWritableHabit(habitId, writeBackend);
 
     try {
       if (action === "start-timer") {
-        startHabitTimer(habitId);
+        startHabitTimer(habitId, windowKey);
         return;
       }
 
@@ -1905,15 +2365,18 @@
       }
 
       if (action === "save-measure") {
-        const card = button.closest("[data-card-key]");
         const input = card
           ? card.querySelector("[data-entry-input]")
           : document.querySelector(`[data-entry-input][data-habit-id="${habitId}"]`);
-        await saveMeasuredHabit(habitId, input ? input.value : "");
+        await saveMeasuredHabit(habitId, input ? input.value : "", windowKey);
         return;
       }
 
       if (action === "mark-done") {
+        if (!habit) {
+          return;
+        }
+
         await Promise.resolve(writeBackend.saveEntry({
           habitId: habitId,
           dateKey: state.selectedDateKey,
@@ -1925,8 +2388,14 @@
       }
 
       if (action === "clear-entry") {
+        if (habit && habit.type === "measurable") {
+          await saveMeasuredHabit(habitId, "", windowKey);
+          return;
+        }
+
         await Promise.resolve(writeBackend.clearEntry(habitId, state.selectedDateKey));
         clearMeasureDraftValue(habitId, state.selectedDateKey);
+        clearWindowLogsForHabitDate(habitId, state.selectedDateKey);
         syncTimerSnapshot(habitId, state.selectedDateKey, 0);
         render();
       }
@@ -1940,7 +2409,6 @@
     state.selectedDateKey = googleBackend.formatDateKey(dateLike);
     render();
   }
-
   function shiftSelectedDate(days) {
     const date = getSelectedDate();
     date.setDate(date.getDate() + days);
@@ -1995,8 +2463,9 @@
           return;
         }
 
-        setMeasureDraftValue(habitId, state.selectedDateKey, measureInput.value);
-        syncVisibleMeasureInputs(habitId, measureInput.value, measureInput);
+        const card = measureInput.closest("[data-card-key]");
+        const windowKey = card ? (card.getAttribute("data-window-key") || "") : "";
+        setMeasureDraftValue(habitId, state.selectedDateKey, windowKey, measureInput.value);
         refreshVisibleWindowSummaries();
         refreshVisibleTimerDisplays();
         return;
@@ -2026,7 +2495,7 @@
         await googleBackend.signIn();
       } catch (error) {
         console.error(error);
-        window.alert("Could not connect Google Sheets. Please check the OAuth origin, then try again.");
+        window.alert(error && error.message ? error.message : "Could not connect Google Sheets. Please check the OAuth origin, then try again.");
       }
     });
     elements.syncButton.addEventListener("click", async function () {
@@ -2064,7 +2533,7 @@
       event.preventDefault();
 
       try {
-        await saveMeasuredHabit(input.getAttribute("data-habit-id"), input.value);
+        await saveMeasuredHabit(input.getAttribute("data-habit-id"), input.value, input.closest("[data-card-key]") ? input.closest("[data-card-key]").getAttribute("data-window-key") : "");
       } catch (error) {
         console.error(error);
         window.alert(error && error.message ? error.message : "Could not save the measurable habit.");
@@ -2094,3 +2563,4 @@
 
   init();
 })(window, document);
+

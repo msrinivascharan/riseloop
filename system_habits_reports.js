@@ -187,6 +187,20 @@
     return Math.max(0, (Number(value) || 0) * multiplier);
   }
 
+  function getHabitDailyTargetValue(backend, habit) {
+    if (!habit) {
+      return 0;
+    }
+
+    if (backend && typeof backend.getHabitDailyTarget === "function") {
+      const dailyTarget = Number(backend.getHabitDailyTarget(habit));
+      return Number.isFinite(dailyTarget) && dailyTarget > 0 ? dailyTarget : 0;
+    }
+
+    const fallbackTarget = Number(habit.target);
+    return Number.isFinite(fallbackTarget) && fallbackTarget > 0 ? fallbackTarget : 0;
+  }
+
   function parseTimeToMinutes(value) {
     const parts = String(value || "").split(":");
     const hours = Number(parts[0]);
@@ -427,7 +441,7 @@
           return;
         }
 
-        target += Number(habit.target) || 0;
+        target += getHabitDailyTargetValue(backend, habit);
         const numericValue = Number(entry && entry.value);
         actual += Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
       });
@@ -486,7 +500,7 @@
           totalActual += progress.complete ? 1 : 0;
           totalTarget += 1;
         } else {
-          totalTarget += Number(habit.target) || 0;
+          totalTarget += getHabitDailyTargetValue(backend, habit);
           const numericValue = Number(entry && entry.value);
           totalActual += Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
         }
@@ -1017,7 +1031,7 @@
             <div class="chart-card-head">
               <div>
                 <h3>${escapeHtml(habit.name)}</h3>
-                <div class="chart-copy">${escapeHtml(buildHabitWindowText(habit))} · ${escapeHtml(habit.type === "measurable" ? `${habit.target} ${unitLabel} / active day` : "checkbox habit")}</div>
+                <div class="chart-copy">${escapeHtml(buildHabitWindowText(habit))} · ${escapeHtml(habit.type === "measurable" ? `${formatCompactNumber(getHabitDailyTargetValue(backend, habit))} ${unitLabel} / active day` : "checkbox habit")}</div>
               </div>
               <div class="chart-chip">${escapeHtml(PERIOD_META[state.period].label)}</div>
             </div>
