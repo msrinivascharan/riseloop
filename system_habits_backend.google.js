@@ -485,7 +485,15 @@
     }
 
     if (habit.type === "checkbox") {
-      if (entry.status === "done") {
+      const checkboxValue = Number(entry.value);
+      const loggedCheckboxDone = entry.status === "logged" && (
+        entry.value === ""
+        || entry.value == null
+        || !Number.isFinite(checkboxValue)
+        || checkboxValue > 0
+      );
+
+      if (entry.status === "done" || loggedCheckboxDone) {
         return {
           complete: true,
           label: "Done",
@@ -1208,4 +1216,5 @@
   window.systemHabitsGapiLoaded = handleGapiLoaded;
   window.systemHabitsGisLoaded = handleGisLoaded;
 })(window);
+
 

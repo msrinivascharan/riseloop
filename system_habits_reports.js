@@ -50,7 +50,11 @@
     positiveCorrelationList: document.getElementById("positiveCorrelationList"),
     signOutButton: document.getElementById("signOutButton"),
     syncButton: document.getElementById("syncButton"),
-    windowInsights: document.getElementById("windowInsights")
+    windowInsights: document.getElementById("windowInsights"),
+    windowRankings: document.getElementById("windowRankings"),
+    windowTrendCharts: document.getElementById("windowTrendCharts"),
+    windowTrendCopy: document.getElementById("windowTrendCopy"),
+    windowTrendInsights: document.getElementById("windowTrendInsights")
   };
 
   function escapeHtml(value) {
@@ -342,6 +346,14 @@
     return entryIndex.get(`${habitId}::${formatDateKey(dateLike)}`) || null;
   }
 
+  function hasHistoricalEntryForDate(entryIndex, habitId, dateLike) {
+    return Boolean(getEntryForDate(entryIndex, habitId, dateLike));
+  }
+
+  function isHabitRelevantForReports(habit, entryIndex, dateLike) {
+    return isHabitActiveOnDate(habit, dateLike) || hasHistoricalEntryForDate(entryIndex, habit.id, dateLike);
+  }
+
   function getProgressForDate(backend, entryIndex, habit, dateLike) {
     return backend.getHabitProgress(habit, getEntryForDate(entryIndex, habit.id, dateLike));
   }
@@ -363,7 +375,7 @@
   function buildDailyScoreSeries(backend, habits, entryIndex, dates) {
     return dates.map(function (date) {
       const activeHabits = habits.filter(function (habit) {
-        return isHabitActiveOnDate(habit, date);
+        return isHabitRelevantForReports(habit, entryIndex, date);
       });
 
       if (!activeHabits.length) {
@@ -384,8 +396,12 @@
     });
   }
 
+  function buildWindowLabel(windowStart, windowEnd) {
+    return String(windowStart || "") + " - " + String(windowEnd || "");
+  }
+
   function buildHabitWindowText(habit) {
-    return `${habit.windowStart} - ${habit.windowEnd}`;
+    return buildWindowLabel(habit.windowStart, habit.windowEnd);
   }
 
   function groupHabitsByCategory(habits) {
@@ -426,7 +442,7 @@
       let activeDays = 0;
 
       bucket.dates.forEach(function (date) {
-        if (!isHabitActiveOnDate(habit, date)) {
+        if (!isHabitRelevantForReports(habit, entryIndex, date)) {
           return;
         }
 
@@ -484,7 +500,7 @@
       let totalTarget = 0;
 
       dates.forEach(function (date) {
-        if (!isHabitActiveOnDate(habit, date)) {
+        if (!isHabitRelevantForReports(habit, entryIndex, date)) {
           return;
         }
 
@@ -519,6 +535,256 @@
     });
   }
 
+  function sortWindowGroups(left, right) {
+    if (left.windowStart !== right.windowStart) {
+      return left.windowStart.localeCompare(right.windowStart);
+    }
+    return left.windowEnd.localeCompare(right.windowEnd);
+  }
+
+  function buildTimeWindowGroups(habits) {
+    const grouped = new Map();
+
+    habits.forEach(function (habit) {
+      if (habit.type !== "measurable" || !getTimeUnitMinutesMultiplier(habit.unit)) {
+        return;
+      }
+
+      const appearances = [{
+        windowKey: getWindowKey(habit.windowStart, habit.windowEnd),
+        windowStart: habit.windowStart,
+        windowEnd: habit.windowEnd,
+        targetValue: Number(habit.target) || 0
+      }].concat((habit.repeatWindows || []).map(function (windowKey) {
+        const parts = String(windowKey || "").split("-");
+        return {
+          windowKey: windowKey,
+          windowStart: parts[0] || "",
+          windowEnd: parts[1] || "",
+          targetValue: Number(habit.repeatWindowTargets && habit.repeatWindowTargets[windowKey]) || 0
+        };
+      }));
+
+      appearances.forEach(function (appearance) {
+        const windowKey = getWindowKey(appearance.windowStart, appearance.windowEnd);
+        if (!windowKey) {
+          return;
+        }
+
+        if (!grouped.has(windowKey)) {
+          grouped.set(windowKey, {
+            windowKey: windowKey,
+            windowStart: appearance.windowStart,
+            windowEnd: appearance.windowEnd,
+            windowDuration: Math.max(0, parseTimeToMinutes(appearance.windowEnd) - parseTimeToMinutes(appearance.windowStart)),
+            appearances: []
+          });
+        }
+
+        grouped.get(windowKey).appearances.push({
+          habit: habit,
+          targetMinutes: habitValueToMinutes(habit, Math.max(0, Number(appearance.targetValue) || 0))
+        });
+      });
+    });
+
+    return Array.from(grouped.values()).sort(sortWindowGroups);
+  }
+
+  function getWindowAllocatedHabitValue(entry, habit, windowKey) {
+    if (!entry || !habit) {
+      return 0;
+    }
+
+    const totalValue = Number(entry.value);
+    if (!Number.isFinite(totalValue) || totalValue <= 0) {
+      return 0;
+    }
+
+    const allocations = entry.windowAllocations && typeof entry.windowAllocations === "object"
+      ? entry.windowAllocations
+      : null;
+
+    if (allocations) {
+      const allocationValue = Number(allocations[windowKey]);
+      if (Number.isFinite(allocationValue) && allocationValue > 0) {
+        return allocationValue;
+      }
+      if (Object.keys(allocations).length > 0) {
+        return 0;
+      }
+    }
+
+    return windowKey === getWindowKey(habit.windowStart, habit.windowEnd) ? totalValue : 0;
+  }
+
+  function buildWindowTrendSeries(windowGroup, entryIndex, buckets) {
+    const series = buckets.map(function (bucket) {
+      let activeDays = 0;
+      let capacityMinutes = 0;
+      let plannedMinutes = 0;
+      let loggedMinutes = 0;
+      let unusedMinutes = 0;
+      let unplannedMinutes = 0;
+
+      bucket.dates.forEach(function (date) {
+        const activeAppearances = windowGroup.appearances.filter(function (appearance) {
+          return isHabitRelevantForReports(appearance.habit, entryIndex, date);
+        });
+
+        if (!activeAppearances.length) {
+          return;
+        }
+
+        activeDays += 1;
+        capacityMinutes += windowGroup.windowDuration;
+
+        const plannedForDay = activeAppearances.reduce(function (sum, appearance) {
+          return sum + appearance.targetMinutes;
+        }, 0);
+
+        const loggedForDay = activeAppearances.reduce(function (sum, appearance) {
+          const entry = getEntryForDate(entryIndex, appearance.habit.id, date);
+          return sum + habitValueToMinutes(appearance.habit, getWindowAllocatedHabitValue(entry, appearance.habit, windowGroup.windowKey));
+        }, 0);
+
+        plannedMinutes += plannedForDay;
+        loggedMinutes += loggedForDay;
+        unusedMinutes += Math.max(0, windowGroup.windowDuration - loggedForDay);
+        unplannedMinutes += Math.max(0, windowGroup.windowDuration - plannedForDay);
+      });
+
+      return {
+        key: bucket.key,
+        label: bucket.label,
+        activeDays: activeDays,
+        capacityMinutes: roundNumber(capacityMinutes, 2),
+        plannedMinutes: roundNumber(plannedMinutes, 2),
+        loggedMinutes: roundNumber(loggedMinutes, 2),
+        unusedMinutes: roundNumber(unusedMinutes, 2),
+        unplannedMinutes: roundNumber(unplannedMinutes, 2),
+        efficiency: plannedMinutes > 0 ? loggedMinutes / plannedMinutes : 0,
+        utilization: capacityMinutes > 0 ? loggedMinutes / capacityMinutes : 0,
+        leakage: capacityMinutes > 0 ? unusedMinutes / capacityMinutes : 0,
+        pressure: capacityMinutes > 0 ? plannedMinutes / capacityMinutes : 0
+      };
+    });
+
+    const totals = series.reduce(function (summary, bucket) {
+      summary.totalActiveDays += bucket.activeDays;
+      summary.totalCapacityMinutes += bucket.capacityMinutes;
+      summary.totalPlannedMinutes += bucket.plannedMinutes;
+      summary.totalLoggedMinutes += bucket.loggedMinutes;
+      summary.totalUnusedMinutes += bucket.unusedMinutes;
+      summary.totalUnplannedMinutes += bucket.unplannedMinutes;
+      return summary;
+    }, {
+      totalActiveDays: 0,
+      totalCapacityMinutes: 0,
+      totalPlannedMinutes: 0,
+      totalLoggedMinutes: 0,
+      totalUnusedMinutes: 0,
+      totalUnplannedMinutes: 0
+    });
+
+    return {
+      series: series,
+      totalActiveDays: totals.totalActiveDays,
+      totalCapacityMinutes: roundNumber(totals.totalCapacityMinutes, 2),
+      totalPlannedMinutes: roundNumber(totals.totalPlannedMinutes, 2),
+      totalLoggedMinutes: roundNumber(totals.totalLoggedMinutes, 2),
+      totalUnusedMinutes: roundNumber(totals.totalUnusedMinutes, 2),
+      totalUnplannedMinutes: roundNumber(totals.totalUnplannedMinutes, 2),
+      efficiency: totals.totalPlannedMinutes > 0 ? totals.totalLoggedMinutes / totals.totalPlannedMinutes : 0,
+      utilization: totals.totalCapacityMinutes > 0 ? totals.totalLoggedMinutes / totals.totalCapacityMinutes : 0,
+      leakage: totals.totalCapacityMinutes > 0 ? totals.totalUnusedMinutes / totals.totalCapacityMinutes : 0,
+      pressure: totals.totalCapacityMinutes > 0 ? totals.totalPlannedMinutes / totals.totalCapacityMinutes : 0,
+      unplannedShare: totals.totalCapacityMinutes > 0 ? totals.totalUnplannedMinutes / totals.totalCapacityMinutes : 0
+    };
+  }
+
+  function buildWindowTrendAnalytics(habits, entryIndex, last30Dates, recent14Dates, previous14Dates) {
+    const last30Buckets = [{ key: "last-30", label: "Last 30 days", dates: last30Dates }];
+    const recent14Buckets = [{ key: "recent-14", label: "Recent 14 days", dates: recent14Dates }];
+    const previous14Buckets = [{ key: "previous-14", label: "Previous 14 days", dates: previous14Dates }];
+
+    const windows = buildTimeWindowGroups(habits).map(function (windowGroup) {
+      const summary = buildWindowTrendSeries(windowGroup, entryIndex, last30Buckets);
+      const recent = buildWindowTrendSeries(windowGroup, entryIndex, recent14Buckets);
+      const previous = buildWindowTrendSeries(windowGroup, entryIndex, previous14Buckets);
+      return {
+        appearances: windowGroup.appearances,
+        habitCount: Array.from(new Set(windowGroup.appearances.map(function (appearance) { return appearance.habit.id; }))).length,
+        totalAppearanceCount: windowGroup.appearances.length,
+        windowDuration: windowGroup.windowDuration,
+        windowEnd: windowGroup.windowEnd,
+        windowKey: windowGroup.windowKey,
+        windowStart: windowGroup.windowStart,
+        efficiency: summary.efficiency,
+        utilization: summary.utilization,
+        leakage: summary.leakage,
+        pressure: summary.pressure,
+        unplannedShare: summary.unplannedShare,
+        totalActiveDays: summary.totalActiveDays,
+        totalCapacityMinutes: summary.totalCapacityMinutes,
+        totalPlannedMinutes: summary.totalPlannedMinutes,
+        totalLoggedMinutes: summary.totalLoggedMinutes,
+        totalUnusedMinutes: summary.totalUnusedMinutes,
+        totalUnplannedMinutes: summary.totalUnplannedMinutes,
+        efficiencyDelta: recent.efficiency - previous.efficiency,
+        utilizationDelta: recent.utilization - previous.utilization
+      };
+    }).filter(function (windowSummary) {
+      return windowSummary.totalActiveDays > 0;
+    });
+
+    const rankedWindows = windows.filter(function (windowSummary) {
+      return windowSummary.totalActiveDays >= 3;
+    });
+
+    return {
+      windows: windows,
+      bestExecution: rankedWindows.slice().sort(function (left, right) {
+        if (right.efficiency !== left.efficiency) {
+          return right.efficiency - left.efficiency;
+        }
+        return right.utilization - left.utilization;
+      })[0] || null,
+      bestUtilized: rankedWindows.slice().sort(function (left, right) {
+        if (right.utilization !== left.utilization) {
+          return right.utilization - left.utilization;
+        }
+        return right.efficiency - left.efficiency;
+      })[0] || null,
+      biggestLeakage: rankedWindows.slice().sort(function (left, right) {
+        if (right.leakage !== left.leakage) {
+          return right.leakage - left.leakage;
+        }
+        return right.totalUnusedMinutes - left.totalUnusedMinutes;
+      })[0] || null,
+      mostUnplanned: rankedWindows.slice().sort(function (left, right) {
+        if (right.unplannedShare !== left.unplannedShare) {
+          return right.unplannedShare - left.unplannedShare;
+        }
+        return right.totalUnplannedMinutes - left.totalUnplannedMinutes;
+      })[0] || null,
+      strongestRecovery: rankedWindows.slice().sort(function (left, right) {
+        return right.efficiencyDelta - left.efficiencyDelta;
+      })[0] || null,
+      bestWindows: rankedWindows.slice().sort(function (left, right) {
+        if (right.efficiency !== left.efficiency) {
+          return right.efficiency - left.efficiency;
+        }
+        return right.utilization - left.utilization;
+      }).slice(0, 4),
+      worstWindows: rankedWindows.slice().sort(function (left, right) {
+        if (right.leakage !== left.leakage) {
+          return right.leakage - left.leakage;
+        }
+        return right.totalUnusedMinutes - left.totalUnusedMinutes;
+      }).slice(0, 4)
+    };
+  }
   function pearsonCorrelation(leftValues, rightValues) {
     const pairs = [];
     let index;
@@ -564,7 +830,7 @@
       return {
         habit: habit,
         values: dates.map(function (date) {
-          if (!isHabitActiveOnDate(habit, date)) {
+          if (!isHabitRelevantForReports(habit, entryIndex, date)) {
             return null;
           }
 
@@ -635,7 +901,7 @@
 
       dates.forEach(function (date) {
         const activeHabits = group.habits.filter(function (habit) {
-          return isHabitActiveOnDate(habit, date);
+          return isHabitRelevantForReports(habit, entryIndex, date);
         });
 
         if (!activeHabits.length) {
@@ -706,6 +972,7 @@
     const categoryGroups = groupHabitsByCategory(habits);
     const correlations = buildCorrelationInsights(backend, habits, entryIndex, last90Dates);
     const windows = buildWindowInsights(habits, entryIndex, last30Dates);
+    const windowTrends = buildWindowTrendAnalytics(habits, entryIndex, last30Dates, recent14Dates, previous14Dates);
     const average30 = average(dailyScore30.map(function (item) { return item.score; }));
     const recentAverage = average(recentScore14.map(function (item) { return item.score; }));
     const previousAverage = average(previousScore14.map(function (item) { return item.score; }));
@@ -797,6 +1064,7 @@
       strongestCategory: strongestCategory,
       trackedDateKeys: trackedDateKeys,
       windows: windows,
+      windowTrends: windowTrends,
       bestDayRhythm: bestDayRhythm
     };
   }
@@ -897,6 +1165,9 @@
 
     elements.overviewCopy.textContent = `These summary cards cover ${analytics.trackedDateKeys.length || 0} tracked days and your current live system shape.`;
     elements.chartSectionCopy.textContent = `${PERIOD_META[state.period].label} bars for each habit, grouped by category. Bars show actual output and the line shows the target for that period.`;
+    if (elements.windowTrendCopy) {
+      elements.windowTrendCopy.textContent = `${PERIOD_META[state.period].label} trend lines for planned, logged, unused, and unplanned time in each window. Repeated habits use saved window allocations when available; older repeated history without allocations falls back to the primary window.`;
+    }
   }
 
   function renderInsights(analytics) {
@@ -1004,9 +1275,190 @@
     }).join("");
   }
 
-  function renderChartSections(backend, analytics) {
-    destroyCharts();
+  function renderWindowTrendRankings(windowTrends) {
+    function buildRankingItems(items, tone, formatter) {
+      if (!items.length) {
+        return '<div class="empty-state">Not enough multi-day window history yet.</div>';
+      }
 
+      return '<div class="ranking-list">' + items.map(function (windowSummary) {
+        return `
+          <article class="ranking-item">
+            <div class="window-chip ${tone}">${escapeHtml(buildWindowLabel(windowSummary.windowStart, windowSummary.windowEnd))}</div>
+            <strong>${escapeHtml(formatter.title(windowSummary))}</strong>
+            <div class="ranking-copy">${escapeHtml(formatter.copy(windowSummary))}</div>
+          </article>
+        `;
+      }).join("") + '</div>';
+    }
+
+    elements.windowRankings.innerHTML = `
+      <section class="ranking-card">
+        <div class="section-head">
+          <div>
+            <h2>Best Windows Over Time</h2>
+            <p class="section-copy">Windows that convert planned time into real logged time most consistently.</p>
+          </div>
+        </div>
+        ${buildRankingItems(windowTrends.bestWindows, "tone-good", {
+          title: function (windowSummary) {
+            return `${formatPercent(windowSummary.efficiency)} execution · ${formatPercent(windowSummary.utilization)} utilization`;
+          },
+          copy: function (windowSummary) {
+            return `${windowSummary.totalActiveDays} active days · ${formatDurationLabel(windowSummary.totalLoggedMinutes)} logged across the last 30 days.`;
+          }
+        })}
+      </section>
+      <section class="ranking-card">
+        <div class="section-head">
+          <div>
+            <h2>Leakage Watch</h2>
+            <p class="section-copy">Windows where the most time is still leaking away after the window closes.</p>
+          </div>
+        </div>
+        ${buildRankingItems(windowTrends.worstWindows, "tone-warn", {
+          title: function (windowSummary) {
+            return `${formatPercent(windowSummary.leakage)} leakage · ${formatDurationLabel(windowSummary.totalUnusedMinutes)} unused`;
+          },
+          copy: function (windowSummary) {
+            return `${formatPercent(windowSummary.pressure)} planned pressure across ${windowSummary.totalActiveDays} active days.`;
+          }
+        })}
+      </section>
+    `;
+  }
+
+  function renderWindowTrends(analytics) {
+    const windowTrends = analytics.windowTrends;
+
+    if (!windowTrends || !windowTrends.windows.length) {
+      elements.windowTrendInsights.innerHTML = "";
+      elements.windowRankings.innerHTML = "";
+      elements.windowTrendCharts.innerHTML = '<div class="empty-state">No repeated or primary time windows have enough saved measurable history yet to draw trend reports.</div>';
+      return;
+    }
+
+    const insightCards = [
+      {
+        chip: "Execution",
+        title: windowTrends.bestExecution ? buildWindowLabel(windowTrends.bestExecution.windowStart, windowTrends.bestExecution.windowEnd) : "Not enough data yet",
+        copy: windowTrends.bestExecution
+          ? `${formatPercent(windowTrends.bestExecution.efficiency)} of planned time converted into logged time over the last 30 days.`
+          : "A few more active days will surface your strongest execution window."
+      },
+      {
+        chip: "Utilization",
+        title: windowTrends.bestUtilized ? buildWindowLabel(windowTrends.bestUtilized.windowStart, windowTrends.bestUtilized.windowEnd) : "Not enough data yet",
+        copy: windowTrends.bestUtilized
+          ? `${formatPercent(windowTrends.bestUtilized.utilization)} of total window capacity is being used. This is your densest window.`
+          : "Utilization needs more repeated history before it becomes meaningful."
+      },
+      {
+        chip: "Leakage",
+        title: windowTrends.biggestLeakage ? buildWindowLabel(windowTrends.biggestLeakage.windowStart, windowTrends.biggestLeakage.windowEnd) : "No leakage signal yet",
+        copy: windowTrends.biggestLeakage
+          ? `${formatDurationLabel(windowTrends.biggestLeakage.totalUnusedMinutes)} unused across the last 30 days, or ${formatPercent(windowTrends.biggestLeakage.leakage)} leakage.`
+          : "No window has enough saved history to call a leakage pattern yet."
+      },
+      {
+        chip: "Unplanned reserve",
+        title: windowTrends.mostUnplanned ? buildWindowLabel(windowTrends.mostUnplanned.windowStart, windowTrends.mostUnplanned.windowEnd) : "Not enough data yet",
+        copy: windowTrends.mostUnplanned
+          ? `${formatDurationLabel(windowTrends.mostUnplanned.totalUnplannedMinutes)} stayed intentionally unallocated across the last 30 days.`
+          : "Once windows have enough history, this will show where spare capacity lives."
+      },
+      {
+        chip: "Recovery",
+        title: windowTrends.strongestRecovery ? buildWindowLabel(windowTrends.strongestRecovery.windowStart, windowTrends.strongestRecovery.windowEnd) : "No recovery signal yet",
+        copy: windowTrends.strongestRecovery && windowTrends.strongestRecovery.efficiencyDelta > 0
+          ? `${formatSignedPercent(windowTrends.strongestRecovery.efficiencyDelta)} better execution in the recent 14 days versus the previous 14.`
+          : "No window is clearly improving versus the prior 14-day block yet."
+      }
+    ];
+
+    elements.windowTrendInsights.innerHTML = insightCards.map(function (card) {
+      return `
+        <article class="insight-card">
+          <div class="insight-chip">${escapeHtml(card.chip)}</div>
+          <strong>${escapeHtml(card.title)}</strong>
+          <div class="insight-copy">${escapeHtml(card.copy)}</div>
+        </article>
+      `;
+    }).join("");
+
+    renderWindowTrendRankings(windowTrends);
+
+    const buckets = buildPeriodBuckets(state.period, new Date());
+    const trendSeriesByWindow = new Map();
+    elements.windowTrendCharts.innerHTML = windowTrends.windows.map(function (windowSummary) {
+      const trendSeries = buildWindowTrendSeries(windowSummary, analytics.entryIndex, buckets);
+      trendSeriesByWindow.set(windowSummary.windowKey, trendSeries);
+      const chartId = `window-trend-${slugify(windowSummary.windowKey)}`;
+      return `
+        <article class="chart-card window-trend-card">
+          <div class="chart-card-head">
+            <div>
+              <h3>${escapeHtml(buildWindowLabel(windowSummary.windowStart, windowSummary.windowEnd))}</h3>
+              <div class="chart-copy">${escapeHtml(String(windowSummary.habitCount))} time-based habit${windowSummary.habitCount === 1 ? "" : "s"} · ${escapeHtml(formatDurationLabel(windowSummary.windowDuration))} per active day</div>
+            </div>
+            <div class="chart-chip">${escapeHtml(PERIOD_META[state.period].label)}</div>
+          </div>
+          <div class="window-trend-stats">
+            <div class="window-trend-stat"><div class="mini-label">Planned</div><strong>${escapeHtml(formatDurationLabel(trendSeries.totalPlannedMinutes))}</strong></div>
+            <div class="window-trend-stat"><div class="mini-label">Logged</div><strong>${escapeHtml(formatDurationLabel(trendSeries.totalLoggedMinutes))}</strong></div>
+            <div class="window-trend-stat"><div class="mini-label">Unused</div><strong>${escapeHtml(formatDurationLabel(trendSeries.totalUnusedMinutes))}</strong></div>
+            <div class="window-trend-stat"><div class="mini-label">Unplanned</div><strong>${escapeHtml(formatDurationLabel(trendSeries.totalUnplannedMinutes))}</strong></div>
+          </div>
+          <div class="window-meta">${escapeHtml(String(trendSeries.totalActiveDays))} active days · ${escapeHtml(formatPercent(trendSeries.efficiency))} execution · ${escapeHtml(formatPercent(trendSeries.leakage))} leakage · ${escapeHtml(formatPercent(trendSeries.pressure))} planned pressure</div>
+          <canvas id="${escapeHtml(chartId)}"></canvas>
+        </article>
+      `;
+    }).join("");
+
+    windowTrends.windows.forEach(function (windowSummary) {
+      const chartNode = document.getElementById(`window-trend-${slugify(windowSummary.windowKey)}`);
+      if (!chartNode || !window.Chart) {
+        return;
+      }
+
+      const trendSeries = trendSeriesByWindow.get(windowSummary.windowKey);
+      const chart = new window.Chart(chartNode.getContext("2d"), {
+        type: "line",
+        data: {
+          labels: trendSeries.series.map(function (bucket) { return bucket.label; }),
+          datasets: [
+            { label: "Planned", data: trendSeries.series.map(function (bucket) { return bucket.plannedMinutes; }), borderColor: "rgba(245, 187, 134, 0.98)", backgroundColor: "rgba(245, 187, 134, 0.18)", borderWidth: 2, tension: 0.22, pointRadius: 2, fill: false },
+            { label: "Logged", data: trendSeries.series.map(function (bucket) { return bucket.loggedMinutes; }), borderColor: "rgba(77, 143, 116, 0.98)", backgroundColor: "rgba(77, 143, 116, 0.16)", borderWidth: 2, tension: 0.22, pointRadius: 2, fill: false },
+            { label: "Unused", data: trendSeries.series.map(function (bucket) { return bucket.unusedMinutes; }), borderColor: "rgba(242, 163, 155, 0.98)", backgroundColor: "rgba(242, 163, 155, 0.14)", borderWidth: 2, tension: 0.22, pointRadius: 2, fill: false },
+            { label: "Unplanned", data: trendSeries.series.map(function (bucket) { return bucket.unplannedMinutes; }), borderColor: "rgba(111, 156, 205, 0.96)", backgroundColor: "rgba(207, 229, 245, 0.16)", borderWidth: 2, borderDash: [7, 5], tension: 0.22, pointRadius: 2, fill: false }
+          ]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { grid: { display: false }, ticks: { color: "#718076" } },
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(91, 112, 95, 0.12)" },
+              ticks: { color: "#718076", callback: function (value) { return formatDurationLabel(value); } }
+            }
+          },
+          plugins: {
+            legend: { labels: { color: "#203128", boxWidth: 12, usePointStyle: true } },
+            tooltip: {
+              backgroundColor: "rgba(32, 49, 40, 0.92)",
+              padding: 12,
+              callbacks: { label: function (context) { return `${context.dataset.label}: ${formatDurationLabel(context.parsed.y)}`; } }
+            }
+          }
+        }
+      });
+      state.charts.push(chart);
+    });
+  }
+  function renderChartSections(backend, analytics) {
     if (!analytics.habits.length) {
       elements.emptyReports.hidden = false;
       elements.chartSections.innerHTML = "";
@@ -1151,6 +1603,7 @@
   function renderAll() {
     renderStatus();
     renderPeriodTabs();
+    destroyCharts();
 
     const backend = getReadBackend();
     const analytics = buildAnalytics(backend);
@@ -1170,6 +1623,7 @@
       "negative"
     );
     renderWindows(analytics);
+    renderWindowTrends(analytics);
     renderChartSections(backend, analytics);
   }
 
@@ -1227,6 +1681,15 @@
 
   initializeReports();
 })(window, document);
+
+
+
+
+
+
+
+
+
 
 
 

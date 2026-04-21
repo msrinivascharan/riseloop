@@ -221,6 +221,8 @@
     .summary-grid,
     .insight-grid,
     .window-grid,
+    .window-trend-grid,
+    .ranking-grid,
     .report-grid,
     .correlation-grid {
       display: grid;
@@ -230,12 +232,15 @@
     .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
     .insight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .window-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .window-trend-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ranking-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .correlation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
     .metric-card,
     .insight-card,
     .window-card,
+    .ranking-card,
     .correlation-card,
     .chart-card {
       border-radius: var(--radius-lg);
@@ -389,6 +394,67 @@
       background: rgba(255, 255, 255, 0.72);
     }
 
+    .window-trend-card canvas {
+      width: 100% !important;
+      height: 250px !important;
+      margin-top: 14px;
+    }
+
+    .window-trend-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .window-trend-stat {
+      padding: 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .window-meta {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.93rem;
+      line-height: 1.6;
+    }
+
+    .ranking-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .ranking-item {
+      display: grid;
+      gap: 4px;
+      padding: 14px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.68);
+    }
+
+    .ranking-item strong {
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .ranking-copy {
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    .tone-good {
+      color: var(--accent-strong);
+    }
+
+    .tone-warn {
+      color: #a1624a;
+    }
+
     .mini-progress {
       width: 100%;
       height: 12px;
@@ -424,6 +490,8 @@
       .summary-grid,
       .insight-grid,
       .window-grid,
+      .window-trend-grid,
+      .ranking-grid,
       .correlation-grid,
       .report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -435,9 +503,12 @@
       .summary-grid,
       .insight-grid,
       .window-grid,
+      .window-trend-grid,
+      .ranking-grid,
       .correlation-grid,
       .report-grid { grid-template-columns: 1fr; }
-      .chart-stats { grid-template-columns: 1fr; }
+      .chart-stats,
+      .window-trend-stats { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -536,6 +607,23 @@
       <section class="card">
         <div class="section-head">
           <div>
+            <h2>Window Trend Reports</h2>
+            <p class="section-copy" id="windowTrendCopy">
+              Daily, weekly, monthly, and yearly trend lines for planned, logged, unused, and unplanned time in each window. Repeated habits use saved window allocations when available; older repeated history without allocations falls back to the primary window.
+            </p>
+          </div>
+        </div>
+        <div class="insight-grid" id="windowTrendInsights"></div>
+        <div class="ranking-grid" id="windowRankings" style="margin-top:14px;"></div>
+        <div class="window-trend-grid" id="windowTrendCharts" style="margin-top:14px;"></div>
+        <div class="foot-note">
+          Planned time is the targeted time inside that window. Unplanned time is the remaining open capacity in the window. Unused time is the time left on the table after the window closed.
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
             <h2>Category Reports</h2>
             <p class="section-copy" id="chartSectionCopy">
               Daily, weekly, monthly, and yearly bars for each habit, grouped by category. Bars show actual output and the line shows the target for that period.
@@ -550,12 +638,15 @@
     </main>
   </div>
 
-  <script src="system_habits_backend.local.js?v=20260326-resetfix2"></script>
+  <script src="system_habits_backend.local.js?v=20260407-checkboxhistory1"></script>
   <script src="system_habits_config.local.js"></script>
   <script src="system_habits_shared.js?v=20260326-resetfix2"></script>
-  <script src="system_habits_backend.google.js?v=20260326-resetfix2"></script>
-  <script src="system_habits_reports.js?v=20260326-resetfix2"></script>
+  <script src="system_habits_backend.google.js?v=20260407-checkboxhistory1"></script>
+  <script src="system_habits_reports.js?v=20260409-windowtrendfix1"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 </body>
 </html>
+
+
+
