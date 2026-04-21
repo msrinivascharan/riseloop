@@ -200,7 +200,8 @@
       createdAt: habit.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       repeatWindows: repeatWindows,
-      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type)
+      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type),
+      savedAt: habit.savedAt || null
     };
   }
 

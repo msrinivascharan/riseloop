@@ -30,7 +30,8 @@
         "createdAt",
         "updatedAt",
         "repeatWindows",
-        "repeatWindowTargets"
+        "repeatWindowTargets",
+        "savedAt"
       ]
     },
     entries: {
@@ -360,7 +361,8 @@
       createdAt: habit.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       repeatWindows: repeatWindows,
-      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type)
+      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type),
+      savedAt: habit.savedAt || null
     };
   }
 
@@ -903,7 +905,8 @@
         createdAt: row[10],
         updatedAt: row[11],
         repeatWindows: row[12],
-        repeatWindowTargets: row[13]
+        repeatWindowTargets: row[13],
+        savedAt: row[14] || null
       }))
       .filter(Boolean);
   }
@@ -941,7 +944,8 @@
       (habit.repeatWindows || []).join("|"),
       Object.keys(habit.repeatWindowTargets || {}).length
         ? JSON.stringify(habit.repeatWindowTargets)
-        : ""
+        : "",
+      habit.savedAt || ""
     ]);
   }
 
