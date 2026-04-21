@@ -514,6 +514,11 @@ Some behaviors are intentional and product-driven:
 - repeated measurable habits persist their per-window allocations inside the entry data
 - window cards summarize their own time and progress
 
+
+## Reports Handbook
+
+If you want a section-by-section explanation of the reports page, read [REPORTS_HANDBOOK.md](./REPORTS_HANDBOOK.md).
+It explains every reports section, chart type, insight card, and the main interpretation caveats.
 ## Roadmap Ideas
 
 Possible next improvements:
@@ -540,4 +545,5 @@ Riseloop is built around a simple belief:
 You do not rise to the level of your goals. You fall to the level of your systems.
 
 This app is meant to help people build those systems in a way that feels calm, visible, and personal.
+
 

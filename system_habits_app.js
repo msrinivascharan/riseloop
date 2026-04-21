@@ -2256,7 +2256,8 @@
       activeDays: activeDays,
       notes: elements.habitNotes.value,
       repeatWindows: getEditorRepeatWindows(),
-      repeatWindowTargets: getEditorRepeatWindowTargets()
+      repeatWindowTargets: getEditorRepeatWindowTargets(),
+      savedAt: new Date().toISOString()
     };
 
     if (!habitInput.name.trim()) {

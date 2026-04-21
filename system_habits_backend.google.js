@@ -30,7 +30,8 @@
         "createdAt",
         "updatedAt",
         "repeatWindows",
-        "repeatWindowTargets"
+        "repeatWindowTargets",
+        "savedAt"
       ]
     },
     entries: {
@@ -360,7 +361,8 @@
       createdAt: habit.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       repeatWindows: repeatWindows,
-      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type)
+      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type),
+      savedAt: habit.savedAt || null
     };
   }
 
@@ -485,7 +487,15 @@
     }
 
     if (habit.type === "checkbox") {
-      if (entry.status === "done") {
+      const checkboxValue = Number(entry.value);
+      const loggedCheckboxDone = entry.status === "logged" && (
+        entry.value === ""
+        || entry.value == null
+        || !Number.isFinite(checkboxValue)
+        || checkboxValue > 0
+      );
+
+      if (entry.status === "done" || loggedCheckboxDone) {
         return {
           complete: true,
           label: "Done",
@@ -895,7 +905,8 @@
         createdAt: row[10],
         updatedAt: row[11],
         repeatWindows: row[12],
-        repeatWindowTargets: row[13]
+        repeatWindowTargets: row[13],
+        savedAt: row[14] || null
       }))
       .filter(Boolean);
   }
@@ -933,7 +944,8 @@
       (habit.repeatWindows || []).join("|"),
       Object.keys(habit.repeatWindowTargets || {}).length
         ? JSON.stringify(habit.repeatWindowTargets)
-        : ""
+        : "",
+      habit.savedAt || ""
     ]);
   }
 
@@ -1208,4 +1220,5 @@
   window.systemHabitsGapiLoaded = handleGapiLoaded;
   window.systemHabitsGisLoaded = handleGisLoaded;
 })(window);
+
 

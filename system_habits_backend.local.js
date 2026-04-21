@@ -200,7 +200,8 @@
       createdAt: habit.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       repeatWindows: repeatWindows,
-      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type)
+      repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type),
+      savedAt: habit.savedAt || null
     };
   }
 
@@ -430,7 +431,15 @@
     }
 
     if (habit.type === "checkbox") {
-      if (entry.status === "done") {
+      const checkboxValue = Number(entry.value);
+      const loggedCheckboxDone = entry.status === "logged" && (
+        entry.value === ""
+        || entry.value == null
+        || !Number.isFinite(checkboxValue)
+        || checkboxValue > 0
+      );
+
+      if (entry.status === "done" || loggedCheckboxDone) {
         return {
           complete: true,
           label: "Done",
@@ -585,3 +594,4 @@
     saveHabit: saveHabit
   };
 })(window);
+
