@@ -38,6 +38,7 @@ The main experience is:
 - focus timers for time-based measurable habits
 - repeated appearances of the same habit across multiple windows
 - a separate reports page for trends, analysis, and insights
+- an AI Analysis page powered by Groq (Llama 3.3 70B) for deep habit intelligence
 
 The app title and UI are branded as `Riseloop Studio`.
 
@@ -348,6 +349,13 @@ Use the daily board to:
 - try the focus timer for time-based habits
 - open `Reports` after a few days of data
 
+### 9. Enable AI Analysis (Optional)
+After a week or more of data:
+- create a free Groq API key at **console.groq.com** (no credit card)
+- add `groqApiKey` to your `system_habits_config.local.js`
+- open `http://localhost:8000/ai_insights.html`
+- try **Deep Analysis** for the full 6-dimension report
+
 If something does not connect on the first try, the most common cause is opening the app from `file://` instead of `http://localhost`.
 
 ## Why `http://localhost` Matters
@@ -400,7 +408,8 @@ window.SystemHabitsConfig = {
   apiKey: "YOUR_GOOGLE_API_KEY",
   spreadsheetId: "YOUR_GOOGLE_SHEET_ID",
   clientId: "YOUR_GOOGLE_OAUTH_CLIENT_ID",
-  scopes: "https://www.googleapis.com/auth/spreadsheets"
+  scopes: "https://www.googleapis.com/auth/spreadsheets",
+  groqApiKey: "YOUR_GROQ_API_KEY"   // optional — only needed for AI Analysis page
 };
 ```
 
@@ -455,7 +464,9 @@ Do not create separate habits if they are truly the same underlying behavior.
 ```text
 index.html
 reports.html
+ai_insights.html
 system_habits_app.js
+system_habits_ai.js
 system_habits_backend.google.js
 system_habits_backend.local.js
 system_habits_config.example.js
@@ -467,11 +478,79 @@ system_habits_shared.js
 ### Main Files
 - `index.html`: main product UI and navigation to reports
 - `reports.html`: the dedicated analytics and insights page
+- `ai_insights.html`: AI Analysis page — daily, weekly, monthly, and deep 6-dimension analysis
 - `system_habits_app.js`: board rendering, timers, editor, scoring, daily behavior
+- `system_habits_ai.js`: AI analysis engine — data computation (Phase A–G) and Groq API integration
 - `system_habits_backend.google.js`: Google Sheets backend
 - `system_habits_backend.local.js`: local fallback backend
 - `system_habits_reports.js`: reports engine for charts, trends, correlations, and window intelligence
 - `system_habits_shared.js`: shared config and older parsing helpers
+
+## AI Analysis Page
+
+`ai_insights.html` provides four levels of AI-generated insight powered by Groq (Llama 3.3 70B, free tier, no credit card required).
+
+### How It Works
+
+JavaScript pre-computes all statistics before the AI call. The model only narrates findings — it does not do raw number crunching. This makes the analysis fast, reliable, and accurate even with a small model.
+
+The computation engine covers seven phases:
+- **Category rankings**: completion rate per category, best to worst
+- **Window rankings**: completion rate per time window (Early Morning, Morning, Afternoon, Evening, Night)
+- **Habit performance tiers**: Favourites (≥80%), Inconsistent (40–79%), Struggling (<40%)
+- **Correlation engine**: co-occurrence lift scores across 30 days to find habits that reinforce or crowd out each other
+- **Trend detection**: 7-day rolling average per habit with slope and volatility labels (rising, falling, stable, volatile)
+- **14-day projections**: linear extrapolation per habit based on current trajectory
+- **Failure pattern detection**: worst day-of-week per habit, average habit load on miss days
+
+### Four Analysis Types
+
+**Daily Analysis**
+Category and time-window verdict for today, one pattern from the week, one concrete action for tomorrow.
+
+**Weekly Analysis**
+7-day category and window rankings, favourite habit, biggest concern, strategy for next week.
+
+**Monthly Analysis**
+30-day trend direction, category performance, trajectory story, what to protect and what to change.
+
+**Deep Analysis**
+The full 6-dimension report in one response:
+1. Wins and losses — category and window rankings with commentary
+2. Favourites and neglected — what has become automatic and what is being under-served
+3. Chain reactions — positive correlations, conflict patterns, anchor habit
+4. Trends and fluctuations — per-habit direction, most important fluctuation
+5. Future outlook — what improves or falls if nothing changes, highest-leverage intervention
+6. Root causes and fixes — why specific habits fail on specific days, one practical suggestion each
+
+### Setup for AI Analysis
+
+1. Create a free account at **console.groq.com** (no credit card required)
+2. Go to **API Keys → Create API key**
+3. Add the key to `system_habits_config.local.js`:
+
+```js
+window.SystemHabitsConfig = {
+  apiKey: "YOUR_GOOGLE_API_KEY",
+  spreadsheetId: "YOUR_GOOGLE_SHEET_ID",
+  clientId: "YOUR_GOOGLE_OAUTH_CLIENT_ID",
+  scopes: "https://www.googleapis.com/auth/spreadsheets",
+  groqApiKey: "YOUR_GROQ_API_KEY"
+};
+```
+
+4. Open `http://localhost:8000/ai_insights.html`
+5. Connect Google Sheets, then click any analysis button
+
+The default model is `llama-3.3-70b-versatile`. To override, add `groqModel: "your-model-name"` to the config.
+
+Free tier limits: 14,400 requests per day, 30 requests per minute — more than enough for personal daily use.
+
+### Privacy Note for AI Analysis
+
+Habit summaries (completion rates, streaks, category names, day-of-week patterns) are sent to Groq's API for processing. Raw entry text and notes are not sent. If privacy is a concern, the AI Analysis page can simply not be used — the daily board and reports page work entirely offline.
+
+---
 
 ## Reports Page
 
@@ -534,9 +613,10 @@ Possible next improvements:
 
 If you publish this repo:
 - include `system_habits_config.example.js`
-- exclude `system_habits_config.local.js`
+- exclude `system_habits_config.local.js` (already in `.gitignore`)
 - document the Google setup clearly
-- make it clear that the main supported page is `index.html`
+- make it clear that the main entry point is `index.html`
+- note that `ai_insights.html` requires a separate free Groq API key and works best with at least a week of data
 
 ## Philosophy
 

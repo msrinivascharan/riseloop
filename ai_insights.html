@@ -224,8 +224,8 @@
       flex-shrink: 0;
     }
 
-    /* ── LM Studio status ─────────────────────────────────────────────── */
-    .lm-status {
+    /* ── AI engine status ─────────────────────────────────────────────── */
+    .ai-status {
       display: flex;
       align-items: center;
       gap: 12px;
@@ -234,44 +234,30 @@
       font-size: 0.95rem;
       font-weight: 500;
       border: 1px solid var(--line);
-      margin-bottom: 14px;
     }
 
-    .lm-status.lm-ready {
+    .ai-status.ai-status-ready {
       background: var(--accent-soft);
       color: var(--accent-strong);
       border-color: rgba(63, 117, 89, 0.2);
     }
 
-    .lm-status.lm-offline {
+    .ai-status.ai-status-offline {
       background: var(--rose-soft);
       color: #a04040;
       border-color: rgba(242, 163, 155, 0.3);
     }
 
-    .lm-status.lm-checking {
-      background: rgba(207, 229, 245, 0.5);
-      color: var(--muted);
-      border-color: rgba(91, 112, 95, 0.1);
-    }
-
-    .lm-dot {
+    .ai-dot {
       width: 10px;
       height: 10px;
       border-radius: 50%;
       flex-shrink: 0;
+      background: var(--muted);
     }
 
-    .lm-ready  .lm-dot { background: var(--accent-strong); }
-    .lm-offline .lm-dot { background: var(--rose); }
-    .lm-checking .lm-dot { background: var(--muted); }
-
-    .lm-hint {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.88rem;
-      line-height: 1.55;
-    }
+    .ai-status-ready  .ai-dot { background: var(--accent-strong); }
+    .ai-status-offline .ai-dot { background: var(--rose); }
 
     /* ── AI Result area ───────────────────────────────────────────────── */
     .ai-result {
@@ -307,6 +293,12 @@
       font-style: italic;
     }
 
+    .ai-result.ai-deep {
+      font-size: 1.02rem;
+      line-height: 1.82;
+      border-color: rgba(63, 117, 89, 0.2);
+    }
+
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50%       { opacity: 0.55; }
@@ -334,11 +326,12 @@
   <div class="page-shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">Local AI · Gemma 3 1B · No Data Leaves Your Laptop</p>
+        <p class="eyebrow">Groq · Llama 3.3 70B · Free API · No Credit Card</p>
         <h1>AI Analysis</h1>
         <p class="hero-copy">
-          Gemma 3 reads your actual habit data and writes a personalised narrative — daily, weekly, or monthly.
-          Everything runs on your laptop through LM Studio. No internet, no API keys, no cost.
+          Llama 3.3 70B running on Groq reads your habit data and delivers personalised insights — daily, weekly,
+          monthly, or a deep 6-dimension report covering rankings, correlations, trends, projections, and root-cause
+          analysis. JavaScript pre-computes all statistics; the AI interprets and articulates the findings.
         </p>
       </div>
       <div class="hero-side">
@@ -359,27 +352,22 @@
 
     <main class="layout">
 
-      <!-- LM Studio status -->
+      <!-- Gemini status -->
       <section class="card">
         <div class="section-head">
           <div>
-            <h2>LM Studio</h2>
+            <h2>Groq · Llama 3.3 70B</h2>
             <p class="section-copy">
-              Gemma 3 1B runs locally through LM Studio's built-in server on port 1234.
-              Start LM Studio, load the model, and click <strong>Start Server</strong> in the Local Server tab.
+              All analyses are powered by Llama 3.3 70B running on Groq's free API tier (14,400 requests/day,
+              no credit card required). JavaScript pre-computes category rankings, window rankings, correlations,
+              trends, and projections before sending a compact structured summary — no raw entries leave your device.
             </p>
           </div>
-          <button class="secondary-button" type="button" id="lmCheckButton">Check connection</button>
         </div>
-        <div class="lm-status lm-checking" id="lmStatus">
-          <div class="lm-dot"></div>
-          <span id="lmStatusText">Checking LM Studio…</span>
+        <div class="ai-status" id="geminiStatus">
+          <div class="ai-dot"></div>
+          <span>Checking API key…</span>
         </div>
-        <p class="lm-hint">
-          Model identifier: <strong>google/gemma-3-1b</strong> —
-          if you see an error, verify this matches the model name shown in LM Studio's Local Server tab
-          and update <code>LM_STUDIO_MODEL</code> in <code>system_habits_ai.js</code>.
-        </p>
       </section>
 
       <!-- Daily Analysis -->
@@ -388,9 +376,9 @@
           <div>
             <h2>Daily Analysis</h2>
             <p class="section-copy">
-              Today's habit status plus the last 7 days for trend context.
-              Gemma gives a daily summary, one weekly insight, and one tip for tomorrow.
-              Expected time: 20 – 40 seconds.
+              Today's habit status with category and time-window breakdowns, plus 7-day context.
+              Gemini gives a verdict on today's winners and losers, one pattern insight from the week,
+              and one concrete action for tomorrow. Usually ready in 3 – 5 seconds.
             </p>
           </div>
           <div class="card-actions">
@@ -400,8 +388,8 @@
         </div>
         <div class="ai-result" id="dailyResult"></div>
         <p class="foot-note">
-          Data sent to Gemma: today's habit list with completion status, daily scores for the last 7 days,
-          and per-habit consistency counts for the week.
+          Data sent to Gemini: today's habit list with status, category and time-window breakdowns for today,
+          and daily scores for the last 7 days.
         </p>
       </section>
 
@@ -411,9 +399,9 @@
           <div>
             <h2>Weekly Analysis</h2>
             <p class="section-copy">
-              Full day-by-day breakdown of the last 7 days with per-habit completion rates and category scores.
-              Gemma identifies the key pattern and recommends one priority for next week.
-              Expected time: 30 – 60 seconds.
+              7-day breakdown with category rankings, time-window rankings, and habit performance tiers.
+              Gemini identifies your favourite habit, biggest concern, and gives one specific strategy for next week.
+              Usually ready in 4 – 6 seconds.
             </p>
           </div>
           <div class="card-actions">
@@ -423,8 +411,8 @@
         </div>
         <div class="ai-result" id="weeklyResult"></div>
         <p class="foot-note">
-          Data sent to Gemma: daily scores and counts for 7 days, per-habit completion rates,
-          logged totals for measurable habits, and category-level averages.
+          Data sent to Gemini: daily scores, category rankings, time-window rankings, habit tiers,
+          per-habit completion rates and logged totals.
         </p>
       </section>
 
@@ -434,9 +422,9 @@
           <div>
             <h2>Monthly Analysis</h2>
             <p class="section-copy">
-              30-day aggregated stats — completion rates, streaks, best/weakest day of the week per habit,
-              and a first-half vs second-half trend comparison.
-              Expected time: 60 – 90 seconds.
+              30-day aggregated stats — category rankings, time-window rankings, completion rates, streaks,
+              and early-vs-recent trend comparison.
+              Gemini tells the trajectory story and names what to protect and what to change. Usually 5 – 7 seconds.
             </p>
           </div>
           <div class="card-actions">
@@ -446,8 +434,32 @@
         </div>
         <div class="ai-result" id="monthlyResult"></div>
         <p class="foot-note">
-          Data sent to Gemma: per-habit completion rates, current and longest streaks, total logged values,
-          best and weakest day of week, and a first-half vs second-half trend score.
+          Data sent to Gemini: category rankings, window rankings, per-habit completion rates,
+          streaks, logged totals, and early-vs-recent trend comparison.
+        </p>
+      </section>
+
+      <!-- Deep Analysis -->
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Deep Analysis</h2>
+            <p class="section-copy">
+              The full 6-dimension report over 30 days. JavaScript pre-computes category and window rankings,
+              habit performance tiers, correlation chains between habits, per-habit trend directions,
+              14-day projections, and day-of-week failure patterns — then Gemini interprets all of it in one
+              comprehensive narrative. Usually ready in 6 – 10 seconds.
+            </p>
+          </div>
+          <div class="card-actions">
+            <button class="ghost-button" type="button" id="deepCopy" hidden>Copy text</button>
+            <button class="primary-button" type="button" id="deepButton" disabled>Generate Deep Analysis</button>
+          </div>
+        </div>
+        <div class="ai-result" id="deepResult"></div>
+        <p class="foot-note">
+          Covers: wins and losses by category and time window · favourite vs neglected habits ·
+          correlation chain reactions · trends and fluctuations · future outlook · root causes and fixes.
         </p>
       </section>
 
@@ -455,10 +467,10 @@
   </div>
 
   <script src="system_habits_backend.local.js?v=20260407-checkboxhistory1"></script>
-  <script src="system_habits_config.local.js"></script>
+  <script src="system_habits_config.local.js?v=20260422-gemini1"></script>
   <script src="system_habits_shared.js?v=20260326-resetfix2"></script>
   <script src="system_habits_backend.google.js?v=20260407-checkboxhistory1"></script>
-  <script src="system_habits_ai.js?v=20260421-aiinsights1"></script>
+  <script src="system_habits_ai.js?v=20260422-groq1"></script>
   <script async defer src="https://apis.google.com/js/api.js"      onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 </body>
