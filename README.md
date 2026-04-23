@@ -255,12 +255,17 @@ For the currently selected day:
 
 This keeps the day view focused and prevents the user from being overloaded by everything at once.
 
+## Prerequisites
+
+- **Python 3** — used to serve the app locally. Check with `python --version` or `py --version`.
+- A modern browser — Chrome is recommended for Google OAuth sign-in.
+- A Google account — only needed if you want the Google Sheets backend. The app runs without it using local browser storage.
+
 ## How to Run Locally
 
 From the project folder:
 
-```powershell
-cd C:\SpaceS\Riseloop
+```bash
 py -m http.server 8000
 ```
 
@@ -270,9 +275,9 @@ Then open:
 http://localhost:8000/index.html
 ```
 
-If `py` does not work on your machine, try:
+If `py` does not work on your machine, try `python` or `python3` instead:
 
-```powershell
+```bash
 python -m http.server 8000
 ```
 
@@ -280,21 +285,26 @@ Keep the terminal open while using the app.
 
 ## First 10 Minutes Setup
 
-If you found this repo on GitHub and want to get to a working app quickly, use this path:
+If you found this repo on GitHub and want to get to a working app quickly, use this path.
 
-### 1. Download or Clone
-Get the repo onto your machine and open the project folder.
+> **Want to try it without any Google account?**
+> Skip steps 2–6. Run the app (step 1 + step 5) and it will work in local-only mode using browser storage. You can add Google Sheets later when you are ready.
+
+### 1. Clone the Repo
+
+```bash
+git clone https://github.com/your-username/riseloop.git
+cd riseloop
+```
 
 ### 2. Create Your Local Config
-Copy:
+Copy `system_habits_config.example.js` to a new file called `system_habits_config.local.js` (this file is gitignored and never committed):
 
-`system_habits_config.example.js`
+```bash
+cp system_habits_config.example.js system_habits_config.local.js
+```
 
-to:
-
-`system_habits_config.local.js`
-
-Then fill in your own Google values:
+Then open `system_habits_config.local.js` and fill in your own Google values:
 - `apiKey`
 - `spreadsheetId`
 - `clientId`
@@ -316,10 +326,8 @@ In Google Cloud:
 - add `http://localhost:8000` as an authorized JavaScript origin
 
 ### 5. Run the App Locally
-From the project folder:
 
-```powershell
-cd C:\SpaceS\Riseloop
+```bash
 py -m http.server 8000
 ```
 
@@ -470,9 +478,12 @@ system_habits_ai.js
 system_habits_backend.google.js
 system_habits_backend.local.js
 system_habits_config.example.js
-system_habits_config.local.js
+system_habits_config.local.js   ← create this from the example (gitignored, not in repo)
 system_habits_reports.js
 system_habits_shared.js
+scripts/
+  start_riseloop_server.ps1
+  start_riseloop_server_hidden.vbs
 ```
 
 ### Main Files
@@ -482,9 +493,12 @@ system_habits_shared.js
 - `system_habits_app.js`: board rendering, timers, editor, scoring, daily behavior
 - `system_habits_ai.js`: AI analysis engine — data computation (Phase A–G) and Groq API integration
 - `system_habits_backend.google.js`: Google Sheets backend
-- `system_habits_backend.local.js`: local fallback backend
+- `system_habits_backend.local.js`: local fallback backend using browser localStorage
+- `system_habits_config.example.js`: config template — copy this to `system_habits_config.local.js` and fill in your keys
 - `system_habits_reports.js`: reports engine for charts, trends, correlations, and window intelligence
 - `system_habits_shared.js`: shared config and older parsing helpers
+- `scripts/start_riseloop_server.ps1`: PowerShell script to start the local Python server
+- `scripts/start_riseloop_server_hidden.vbs`: VBScript launcher to run the server silently on Windows startup
 
 ## AI Analysis Page
 

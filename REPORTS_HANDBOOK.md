@@ -107,10 +107,9 @@ Total time captured from time-based measurable habits over the last 30 days.
 
 This includes units like:
 
-- `minutes`
-- `min`
-- `hours`
-- `hr`
+- `seconds` / `sec`
+- `minutes` / `min`
+- `hours` / `hr`
 
 It does not include non-time measurable units like:
 
@@ -150,6 +149,8 @@ This is useful for spotting habits that are gaining traction.
 ### Best Rhythm
 
 Finds the weekday that tends to produce your strongest average score.
+
+This uses the last 90 days of daily scores, giving it more data than the other insight cards.
 
 Example:
 
@@ -618,10 +619,9 @@ If the habit was deleted, its entries were deleted too.
 
 Window reports only work for measurable habits with time units like:
 
-- `min`
-- `minutes`
-- `hr`
-- `hours`
+- `sec` / `secs` / `second` / `seconds`
+- `min` / `mins` / `minute` / `minutes`
+- `hr` / `hrs` / `hour` / `hours`
 
 ### 5. Repeated-window legacy history
 

@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$projectRoot = "C:\SpaceS\Riseloop"
+$projectRoot = Split-Path $PSScriptRoot -Parent
 $port = 8000
 $logDir = Join-Path $projectRoot "logs"
 $stdoutLog = Join-Path $logDir "riseloop-server.out.log"
