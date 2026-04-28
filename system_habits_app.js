@@ -58,6 +58,7 @@
     editingHabitId: null,
     measureDrafts: {},
     selectedDateKey: googleBackend.formatDateKey(new Date()),
+    showAllHabitsWindows: new Set(),
     timers: readPersistedTimerState(),
     windowLogs: readPersistedWindowLogState()
   };
@@ -346,6 +347,17 @@
 
   function getAppearanceWindowKey(habit) {
     return getWindowKey(habit && habit.windowStart, habit && habit.windowEnd);
+  }
+
+  function isHabitCompleteForWindow(habit, entry, dateKey) {
+    if (!entry) return false;
+    if (habit.type === "checkbox") {
+      return entry.status === "done";
+    }
+    const appearanceWindowKey = getAppearanceWindowKey(habit);
+    const windowValue = getStoredWindowValueForHabit(habit, dateKey, appearanceWindowKey);
+    const windowTarget = typeof habit.appearanceTarget === "number" ? habit.appearanceTarget : 0;
+    return windowTarget > 0 && windowValue >= windowTarget;
   }
 
   function getHabitWindowSequence(habitLike) {
@@ -1808,6 +1820,74 @@
     elements.backendDayData.textContent = JSON.stringify(selectedEntries, null, 2);
   }
 
+  function buildHabit30DayStats(backend, habits) {
+    const snapshot = backend.getStateSnapshot ? backend.getStateSnapshot() : {};
+    const allEntries = snapshot && snapshot.entries ? snapshot.entries : [];
+    const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+    const entryIndex = new Map();
+    allEntries.forEach(function (entry) {
+      entryIndex.set(`${entry.habitId}::${entry.dateKey}`, entry);
+    });
+
+    const today = new Date();
+    const last30DateKeys = [];
+    const last30DayOfWeek = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      last30DateKeys.push(backend.formatDateKey(d));
+      last30DayOfWeek.push(d.getDay());
+    }
+
+    const statsMap = new Map();
+    habits.forEach(function (habit) {
+      const dailyTarget = backend.getHabitDailyTarget ? backend.getHabitDailyTarget(habit) : 0;
+
+      const dayResults = last30DateKeys.map(function (dateKey, i) {
+        const isActive = habit.activeDays && habit.activeDays.includes(DAY_NAMES[last30DayOfWeek[i]]);
+        if (!isActive) return { active: false, complete: false, loggedValue: 0 };
+
+        const entry = entryIndex.get(`${habit.id}::${dateKey}`) || null;
+        let complete = false;
+        let loggedValue = 0;
+        if (habit.type === "checkbox") {
+          complete = Boolean(entry && entry.status === "done");
+        } else {
+          loggedValue = entry ? Math.max(0, Number(entry.value) || 0) : 0;
+          complete = dailyTarget > 0 && loggedValue >= dailyTarget;
+        }
+        return { active: true, complete, loggedValue };
+      });
+
+      const activeDays = dayResults.filter(function (d) { return d.active; }).length;
+      const completions = dayResults.filter(function (d) { return d.active && d.complete; }).length;
+
+      let streak = 0;
+      for (let i = dayResults.length - 1; i >= 0; i--) {
+        if (!dayResults[i].active) continue;
+        if (!dayResults[i].complete) break;
+        streak++;
+      }
+
+      let logged30 = 0;
+      let target30 = 0;
+      if (habit.type === "measurable") {
+        dayResults.forEach(function (d) {
+          if (!d.active) return;
+          target30 += dailyTarget;
+          logged30 += d.loggedValue;
+        });
+        logged30 = Math.round(logged30 * 10) / 10;
+        target30 = Math.round(target30 * 10) / 10;
+      }
+
+      statsMap.set(habit.id, { streak, completions, activeDays, logged30, target30 });
+    });
+
+    return statsMap;
+  }
+
   function renderDailyBoard(boardContext) {
     const status = googleBackend.getStatus();
     elements.dayInput.value = state.selectedDateKey;
@@ -1857,12 +1937,22 @@
     }
 
     const windowSections = buildWindowSections(boardContext.visibleWindows);
+    const habitStatsMap = buildHabit30DayStats(boardContext.backendRef, boardContext.uniqueVisibleHabits);
 
     elements.emptyCheckin.hidden = true;
     elements.checkInList.innerHTML = windowSections
       .map((windowSection) => {
         const windowMetrics = getWindowSummaryMetrics(windowSection, boardContext);
-        const habitsHtml = windowSection.habits
+        const showAllDone = state.showAllHabitsWindows.has(windowSection.windowKey);
+        const habitCompleteMap = new Map(windowSection.habits.map((habit) => {
+          const entry = boardContext.entriesByHabit.get(habit.id);
+          return [habit.appearanceKey || habit.id, isHabitCompleteForWindow(habit, entry, state.selectedDateKey)];
+        }));
+        const doneCount = windowSection.habits.filter((habit) => habitCompleteMap.get(habit.appearanceKey || habit.id)).length;
+        const visibleHabits = showAllDone
+          ? windowSection.habits
+          : windowSection.habits.filter((habit) => !habitCompleteMap.get(habit.appearanceKey || habit.id));
+        const habitsHtml = visibleHabits
           .map((habit) => {
             const cardKey = habit.appearanceKey || `${habit.id}::${windowSection.windowKey}`;
             const entry = boardContext.entriesByHabit.get(habit.id);
@@ -1978,6 +2068,13 @@
                   </div>
                   ${controls}
                   ${habit.notes ? `<p class="track-note">${escapeHtml(habit.notes)}</p>` : ""}
+                  ${(function () {
+                    const s = habitStatsMap.get(habit.id) || { streak: 0, completions: 0, activeDays: 0, logged30: 0, target30: 0 };
+                    const volumeHtml = habit.type === "measurable" && s.target30 > 0
+                      ? `<div class="insight-stat"><span class="insight-val">${s.logged30}/${s.target30}${habit.unit ? " " + escapeHtml(habit.unit) : ""}</span><span class="insight-lbl">monthly</span></div>`
+                      : "";
+                    return `<div class="habit-insight-bar"><div class="insight-stat"><span class="insight-val">${s.streak}</span><span class="insight-lbl">day streak</span></div><div class="insight-stat"><span class="insight-val">${s.completions}/${s.activeDays}</span><span class="insight-lbl">last 30 days</span></div>${volumeHtml}</div>`;
+                  })()}
                 </div>
               </article>
             `;
@@ -1995,7 +2092,7 @@
                 <div class="category-title-wrap">
                   <div class="category-chip">${escapeHtml(windowSection.windowCopy)}</div>
                   <div class="category-copy">
-                    ${windowSection.habits.length} habit${windowSection.habits.length === 1 ? "" : "s"} in this window${windowSection.categoriesText ? ` · ${escapeHtml(windowSection.categoriesText)}` : ""}
+                    ${windowSection.habits.length} habit${windowSection.habits.length === 1 ? "" : "s"} in this window${doneCount > 0 ? ` · ${doneCount} done` : ""}${windowSection.categoriesText ? ` · ${escapeHtml(windowSection.categoriesText)}` : ""}
                   </div>
                 </div>
                 <div class="category-meta">
@@ -2033,7 +2130,8 @@
               </div>
             </summary>
             <div class="category-body">
-              <div class="window-grid">${habitsHtml}</div>
+              ${doneCount > 0 ? `<div class="window-done-bar"><button class="window-show-done-btn${showAllDone ? " active" : ""}" type="button" data-action="toggle-show-done" data-window-key="${escapeHtml(windowSection.windowKey)}">${showAllDone ? "Hide done" : `Show ${doneCount} done`}</button></div>` : ""}
+              <div class="window-grid">${habitsHtml || `<p class="window-all-done">All habits in this window are done.</p>`}</div>
             </div>
           </details>
         `;
@@ -2370,6 +2468,20 @@
           ? card.querySelector("[data-entry-input]")
           : document.querySelector(`[data-entry-input][data-habit-id="${habitId}"]`);
         await saveMeasuredHabit(habitId, input ? input.value : "", windowKey);
+        return;
+      }
+
+      if (action === "toggle-show-done") {
+        const windowKey = event.target.closest("[data-window-key]") && event.target.closest("[data-window-key]").getAttribute("data-window-key");
+        if (!windowKey) {
+          return;
+        }
+        if (state.showAllHabitsWindows.has(windowKey)) {
+          state.showAllHabitsWindows.delete(windowKey);
+        } else {
+          state.showAllHabitsWindows.add(windowKey);
+        }
+        render();
         return;
       }
 

@@ -46,7 +46,7 @@
     }
 
     button, input, select, textarea { font: inherit; }
-    button { border: 0; cursor: pointer; }
+    button { border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
     button:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
 
     .page-shell {
@@ -212,11 +212,13 @@
     }
 
     .ghost-button { color: var(--accent-strong); }
-    .primary-button:hover,
-    .secondary-button:hover,
-    .ghost-button:hover,
-    .period-button:hover,
-    .button-link:hover { transform: translateY(-1px); }
+    @media (hover: hover) {
+      .primary-button:hover,
+      .secondary-button:hover,
+      .ghost-button:hover,
+      .period-button:hover,
+      .button-link:hover { transform: translateY(-1px); }
+    }
 
     .summary-grid,
     .insight-grid,
@@ -509,6 +511,13 @@
       .report-grid { grid-template-columns: 1fr; }
       .chart-stats,
       .window-trend-stats { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      .page-shell { width: 100%; padding: 12px 0 40px; }
+      .hero { padding: 18px; border-radius: 16px; }
+      .hero-copy { display: none; }
+      h1 { font-size: 2rem; }
     }
   </style>
 </head>

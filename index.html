@@ -62,6 +62,8 @@
     button {
       border: 0;
       cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
 
     button:disabled {
@@ -342,13 +344,15 @@
       color: var(--muted);
     }
 
-    .date-button:hover,
-    .inline-action:hover,
-    .toggle-action:hover,
-    .ghost-button:hover,
-    .secondary-button:hover,
-    .primary-button:hover {
-      transform: translateY(-1px);
+    @media (hover: hover) {
+      .date-button:hover,
+      .inline-action:hover,
+      .toggle-action:hover,
+      .ghost-button:hover,
+      .secondary-button:hover,
+      .primary-button:hover {
+        transform: translateY(-1px);
+      }
     }
 
     .date-input {
@@ -500,8 +504,10 @@
       display: none;
     }
 
-    .category-summary:hover {
-      background: rgba(255, 255, 255, 0.36);
+    @media (hover: hover) {
+      .category-summary:hover {
+        background: rgba(255, 255, 255, 0.36);
+      }
     }
 
     .window-summary-head {
@@ -579,6 +585,43 @@
 
     .category-body {
       padding: 0 18px 18px;
+    }
+
+    .window-done-bar {
+      padding-bottom: 12px;
+    }
+
+    .window-show-done-btn {
+      background: none;
+      border: 1.5px solid rgba(0, 0, 0, 0.12);
+      border-radius: 20px;
+      color: #666;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 4px 14px;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    @media (hover: hover) {
+      .window-show-done-btn:hover {
+        background: rgba(0, 0, 0, 0.05);
+        border-color: rgba(0, 0, 0, 0.22);
+        color: #333;
+      }
+    }
+
+    .window-show-done-btn.active {
+      background: rgba(49, 95, 71, 0.1);
+      border-color: rgba(49, 95, 71, 0.3);
+      color: #315f47;
+    }
+
+    .window-all-done {
+      color: #7a9b8a;
+      font-size: 0.88rem;
+      margin: 0;
+      padding: 8px 0;
     }
 
     .window-summary-stats {
@@ -956,6 +999,57 @@
       padding-top: 2px;
       color: var(--muted);
       line-height: 1.55;
+    }
+
+    .habit-insight-bar {
+      border-top: 1px solid rgba(0, 0, 0, 0.07);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 20px;
+      margin-top: 12px;
+      padding-top: 10px;
+    }
+
+    .insight-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 44px;
+    }
+
+    .insight-val {
+      color: #1a1a1a;
+      font-size: 0.88rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .insight-lbl {
+      color: #aaa;
+      font-size: 0.67rem;
+      letter-spacing: 0.05em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    .track-card.status-done .habit-insight-bar {
+      border-top-color: rgba(49, 95, 71, 0.12);
+    }
+
+    .track-card.status-done .insight-val {
+      color: #315f47;
+    }
+
+    .track-card.status-done .insight-lbl {
+      color: #7a9b8a;
+    }
+
+    .track-card.status-missed .insight-val {
+      color: #7f5c55;
+    }
+
+    .track-card.status-missed .habit-insight-bar {
+      border-top-color: rgba(191, 101, 86, 0.12);
     }
 
     .editor {
@@ -1402,7 +1496,10 @@
         text-align: left;
       }
 
-      .stat-grid,
+      .stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .form-grid,
       .habit-card-grid,
       .backend-grid,
@@ -1453,6 +1550,48 @@
 
       .timer-clock {
         text-align: left;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-shell {
+        width: 100%;
+        padding: 12px 0 40px;
+      }
+
+      .hero {
+        padding: 18px;
+        border-radius: 16px;
+        margin-bottom: 16px;
+      }
+
+      .hero-principles {
+        display: none;
+      }
+
+      h1 {
+        font-size: 2rem;
+      }
+
+      .stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card {
+        border-radius: 16px;
+      }
+
+      .track-card {
+        padding: 14px;
+        border-radius: 14px;
+      }
+
+      .category-body {
+        padding: 0 12px 14px;
+      }
+
+      .habit-insight-bar {
+        gap: 4px 14px;
       }
     }
   </style>
