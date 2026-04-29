@@ -37,8 +37,11 @@ The main experience is:
 - window-based grouping for the daily flow
 - focus timers for time-based measurable habits
 - repeated appearances of the same habit across multiple windows
+- completed habits auto-hide from their window once done or target met, with a per-window "Show done" toggle to reveal them
+- a 30-day streak and consistency insight bar on every habit card
 - a separate reports page for trends, analysis, and insights
 - an AI Analysis page powered by Groq (Llama 3.3 70B) for deep habit intelligence
+- mobile and touch-optimized across all pages
 
 The app title and UI are branded as `Riseloop Studio`.
 
@@ -58,6 +61,28 @@ Window summary includes:
 - time logged
 - unlogged so far or unused after close
 - elapsed time bar
+
+### Completed Habit Auto-Hide
+
+Once a habit is complete in a window it disappears automatically:
+- checkbox habits vanish as soon as they are marked Done
+- measurable habits vanish once the logged value reaches the window-level target
+
+This is per-window, not global:
+- if the same habit has repeat windows and the target is not yet met in a later window, it still appears there
+- if all habits in a window are done, the window shows "All habits in this window are done."
+
+Each window with completed habits shows a **Show N done** button inside the open panel. Clicking it reveals or hides the completed cards. The count of done habits is also shown in the collapsed window header.
+
+### 30-Day Insight Bar
+
+Every habit card shows a compact insight strip at the bottom of the card, visible without leaving the daily board:
+
+- **Day streak** — consecutive days the habit was completed (inactive days are skipped and do not break the streak)
+- **Last 30 days** — completions out of active days, e.g. `18/24`
+- **Monthly volume** — for measurable habits only: total logged vs total target across all active days in the last 30, e.g. `450/600 min`
+
+This gives an at-a-glance sense of how consistent a habit has been without opening Reports or AI Analysis.
 
 ### Master Habit Studio
 - Create new habits from the UI.
@@ -606,6 +631,8 @@ Some behaviors are intentional and product-driven:
 - repeated appearances share one habit id and one daily entry
 - repeated measurable habits persist their per-window allocations inside the entry data
 - window cards summarize their own time and progress
+- completed habit cards hide automatically and reappear only if the "Show done" toggle is on
+- auto-hide is evaluated per window, not per habit globally — the same habit can be hidden in one window and visible in another
 
 
 ## Reports Handbook
@@ -617,7 +644,7 @@ It explains every reports section, chart type, insight card, and the main interp
 Possible next improvements:
 - add better export or backup tools
 - add non-destructive archive mode instead of hard delete
-- add richer analytics for repeated habits
+- add per-window historical analytics for repeated habits (the daily insight bar is done; window-level history in reports is still conservative)
 - add category filters and saved report views
 - add custom ordering or priority within windows
 - add deploy instructions for hosted use
