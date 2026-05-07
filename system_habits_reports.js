@@ -18,7 +18,7 @@
     sun: "Sunday"
   };
   const PERIOD_META = {
-    daily: { label: "Daily", count: 14 },
+    daily: { label: "Daily", count: 30 },
     weekly: { label: "Weekly", count: 12 },
     monthly: { label: "Monthly", count: 12 },
     yearly: { label: "Yearly", count: 5 }
@@ -1478,6 +1478,8 @@
           ? (habit.unit || "units")
           : "completions";
 
+        const hasNoDataInPeriod = stats.series.every(function (b) { return b.activeDays === 0; });
+
         return `
           <article class="chart-card">
             <div class="chart-card-head">
@@ -1501,7 +1503,10 @@
                 <strong>${escapeHtml(formatPercent(stats.hitRate))}</strong>
               </div>
             </div>
-            <canvas id="${escapeHtml(chartId)}"></canvas>
+            ${hasNoDataInPeriod
+              ? `<div class="chart-empty">No log entries found in this period. Switch to a longer view or check if data has been synced.</div>`
+              : `<canvas id="${escapeHtml(chartId)}"></canvas>`
+            }
           </article>
         `;
       }).join("");
@@ -1534,6 +1539,7 @@
         }
 
         const series = buildHabitSeries(backend, habit, analytics.entryIndex, buckets);
+        const maxTarget = series.series.reduce(function (max, b) { return Math.max(max, b.target); }, 0);
         const chart = new window.Chart(chartNode.getContext("2d"), {
           type: "bar",
           data: {
@@ -1569,10 +1575,16 @@
             scales: {
               x: {
                 grid: { display: false },
-                ticks: { color: "#718076" }
+                ticks: {
+                  color: "#718076",
+                  maxRotation: 45,
+                  autoSkip: true,
+                  maxTicksLimit: 15
+                }
               },
               y: {
                 beginAtZero: true,
+                suggestedMax: maxTarget > 0 ? maxTarget : 1,
                 grid: { color: "rgba(91, 112, 95, 0.12)" },
                 ticks: { color: "#718076" }
               }
