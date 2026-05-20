@@ -11,6 +11,7 @@
 
   const AUTH_FLAG_KEY = "system_habits_google_auth";
   const LEGACY_LOCAL_STORAGE_KEY = "system-habits-studio-v1";
+  const GUARDIAN_KEY = "riseloop_guardian_entry_count";
   const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   const ENTRY_STATUS = ["pending", "done", "skipped", "logged"];
   const SHEETS = {
@@ -777,12 +778,20 @@
 
         try {
           window.localStorage.setItem(AUTH_FLAG_KEY, "true");
+          // Mark signed-in silently so sync()'s requireSignedIn() passes,
+          // but do NOT emit yet — the UI stays in "connecting" state until
+          // the initial load is complete, preventing any saveEntry() call
+          // from running persistEntries() with an empty state.entries.
+          state.status.signedIn = true;
+          state.status.needsReconnect = false;
+          state.status.error = "";
+          await sync();
+          // Emit once, after entries are fully loaded — user can interact safely now
           updateStatus({
             signedIn: true,
             needsReconnect: false,
             error: ""
           });
-          await sync();
           resolve();
         } catch (error) {
           console.error(error);
@@ -964,20 +973,52 @@
     ]);
   }
 
-  async function writeSheet(sheetConfig, rows) {
-    await window.gapi.client.sheets.spreadsheets.values.clear({
-      spreadsheetId: config.spreadsheetId,
-      range: sheetConfig.title
-    });
+  function sheetColumnLetter(n) {
+    let result = "";
+    let col = n;
+    while (col > 0) {
+      col -= 1;
+      result = String.fromCharCode(65 + (col % 26)) + result;
+      col = Math.floor(col / 26);
+    }
+    return result;
+  }
 
+  async function writeSheet(sheetConfig, rows) {
+    // Guardian: refuse to write if entry count drops more than 10% unexpectedly
+    if (sheetConfig.title === SHEETS.entries.title) {
+      const lastKnown = parseInt(window.localStorage.getItem(GUARDIAN_KEY) || "0", 10);
+      const newCount = rows.length;
+      if (lastKnown > 20 && newCount < lastKnown * 0.9) {
+        const msg = `[Riseloop Guardian] BLOCKED write: would shrink entries from ${lastKnown} → ${newCount} (${lastKnown - newCount} entries would be lost). Fix the issue first, then call riseloopGuardianOverride() to allow one write.`;
+        console.error(msg);
+        if (window.riseloopGuardianOverride) {
+          window.riseloopGuardianOverride = false;
+        } else {
+          throw new Error(msg);
+        }
+      }
+    }
+
+    const allValues = [sheetConfig.headers].concat(rows);
+    const lastDataRow = allValues.length;
+    const lastCol = sheetColumnLetter(sheetConfig.headers.length);
+
+    // Write data FIRST — if anything fails after this, data is already safe in the sheet
     await window.gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId: config.spreadsheetId,
       range: `${sheetConfig.title}!A1`,
       valueInputOption: "RAW",
-      resource: {
-        values: [sheetConfig.headers].concat(rows)
-      }
+      resource: { values: allValues }
     });
+
+    // Then clear only the stale rows below our data (safe even if this fails)
+    try {
+      await window.gapi.client.sheets.spreadsheets.values.clear({
+        spreadsheetId: config.spreadsheetId,
+        range: `${sheetConfig.title}!A${lastDataRow + 1}:${lastCol}10000`
+      });
+    } catch (e) { /* stale rows may remain — harmless, cleared on next write */ }
   }
 
   async function importLegacyLocalDataIfNeeded() {
@@ -1025,6 +1066,7 @@
       state.entries = parseEntryRows(entryRows);
       await importLegacyLocalDataIfNeeded();
       state.meta.lastSyncedAt = new Date().toISOString();
+      window.localStorage.setItem(GUARDIAN_KEY, String(state.entries.length));
       updateStatus({
         syncing: false,
         error: ""

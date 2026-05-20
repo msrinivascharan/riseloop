@@ -440,6 +440,7 @@
       let target = 0;
       let progressSum = 0;
       let activeDays = 0;
+      let entryCount = 0;
 
       bucket.dates.forEach(function (date) {
         if (!isHabitRelevantForReports(habit, entryIndex, date)) {
@@ -448,6 +449,9 @@
 
         activeDays += 1;
         const entry = getEntryForDate(entryIndex, habit.id, date);
+        if (entry) {
+          entryCount += 1;
+        }
         const progress = backend.getHabitProgress(habit, entry);
         progressSum += progress.progressRatio;
 
@@ -468,6 +472,7 @@
         actual: roundNumber(actual, 2),
         target: roundNumber(target, 2),
         activeDays: activeDays,
+        entryCount: entryCount,
         avgProgress: activeDays ? progressSum / activeDays : 0
       };
     });
@@ -478,6 +483,12 @@
     const totalTarget = series.reduce(function (sum, bucket) {
       return sum + bucket.target;
     }, 0);
+    const totalActiveDays = series.reduce(function (sum, bucket) {
+      return sum + bucket.activeDays;
+    }, 0);
+    const totalEntryCount = series.reduce(function (sum, bucket) {
+      return sum + bucket.entryCount;
+    }, 0);
     const averageProgress = average(series.map(function (bucket) {
       return bucket.activeDays ? bucket.avgProgress : null;
     }));
@@ -487,6 +498,8 @@
       series: series,
       totalActual: roundNumber(totalActual, 2),
       totalTarget: roundNumber(totalTarget, 2),
+      totalActiveDays: totalActiveDays,
+      totalEntryCount: totalEntryCount,
       hitRate: totalTarget > 0 ? totalActual / totalTarget : averageProgress
     };
   }
@@ -948,10 +961,33 @@
     });
   }
 
+  function mergeLocalEntries(googleEntries, habits) {
+    if (!localBackend) {
+      return googleEntries;
+    }
+    try {
+      const localSnapshot = localBackend.getStateSnapshot();
+      const localEntries = localSnapshot.entries || [];
+      if (!localEntries.length) {
+        return googleEntries;
+      }
+      const habitIds = new Set(habits.map(function (h) { return h.id; }));
+      const googleKeys = new Set(googleEntries.map(function (e) { return e.habitId + "::" + e.dateKey; }));
+      const extras = localEntries.filter(function (e) {
+        return habitIds.has(e.habitId) && !googleKeys.has(e.habitId + "::" + e.dateKey);
+      });
+      return extras.length ? googleEntries.concat(extras) : googleEntries;
+    } catch (err) {
+      return googleEntries;
+    }
+  }
+
   function buildAnalytics(backend) {
     const snapshot = backend.getStateSnapshot();
     const habits = backend.listHabits();
-    const entries = snapshot.entries || [];
+    const isGoogleBackend = backend === googleBackend && googleBackend.getStatus().signedIn;
+    const rawEntries = snapshot.entries || [];
+    const entries = isGoogleBackend ? mergeLocalEntries(rawEntries, habits) : rawEntries;
     const trackedDateKeys = Array.from(new Set(entries.map(function (entry) {
       return entry.dateKey;
     }))).sort();
@@ -1502,6 +1538,10 @@
                 <div class="mini-label">Hit rate</div>
                 <strong>${escapeHtml(formatPercent(stats.hitRate))}</strong>
               </div>
+              <div class="chart-stat">
+                <div class="mini-label">Entries</div>
+                <strong>${escapeHtml(String(stats.totalEntryCount))}</strong>
+              </div>
             </div>
             ${hasNoDataInPeriod
               ? `<div class="chart-empty">No log entries found in this period. Switch to a longer view or check if data has been synced.</div>`
@@ -1612,6 +1652,63 @@
     });
   }
 
+  function runIntegrityChecks(habits, entries) {
+    const issues = [];
+    const habitIds = new Set(habits.map(function (h) { return h.id; }));
+
+    // Orphaned entries — habitId matches no current habit
+    const orphaned = entries.filter(function (e) { return !habitIds.has(e.habitId); });
+    if (orphaned.length > 0) {
+      issues.push({ level: "warn", msg: orphaned.length + " entries reference deleted habits (orphaned). Run riseloopDebug() for details." });
+    }
+
+    // Bad date format
+    const badDates = entries.filter(function (e) { return !/^\d{4}-\d{2}-\d{2}$/.test(e.dateKey || ""); });
+    if (badDates.length > 0) {
+      issues.push({ level: "error", msg: badDates.length + " entries have an invalid date format." });
+    }
+
+    // Duplicate entries (same habit + same date)
+    const seen = new Set();
+    let dupes = 0;
+    entries.forEach(function (e) {
+      const k = e.habitId + "::" + e.dateKey;
+      if (seen.has(k)) { dupes++; } else { seen.add(k); }
+    });
+    if (dupes > 0) {
+      issues.push({ level: "warn", msg: dupes + " duplicate entries (same habit + date). Data may be double-counted." });
+    }
+
+    // Guardian: entry count drop vs localStorage baseline
+    const guardianCount = parseInt(window.localStorage.getItem("riseloop_guardian_entry_count") || "0", 10);
+    if (guardianCount > 20 && entries.length < guardianCount * 0.9) {
+      issues.push({ level: "error", msg: "Entry count dropped from " + guardianCount + " → " + entries.length + ". Possible data loss — check Google Sheets version history immediately." });
+    }
+
+    return issues;
+  }
+
+  function renderHealthBanner(issues) {
+    let banner = document.getElementById("riseloop-health-banner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "riseloop-health-banner";
+      banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;font-size:13px;font-family:sans-serif;";
+      document.body.prepend(banner);
+    }
+    if (!issues.length) {
+      banner.innerHTML = "";
+      return;
+    }
+    const hasError = issues.some(function (i) { return i.level === "error"; });
+    const bg = hasError ? "#c0392b" : "#e67e22";
+    const lines = issues.map(function (i) { return (i.level === "error" ? "✖ " : "⚠ ") + i.msg; }).join("<br>");
+    banner.innerHTML = '<div style="background:' + bg + ';color:#fff;padding:8px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
+      '<span>' + lines + '</span>' +
+      '<button onclick="document.getElementById(\'riseloop-health-banner\').innerHTML=\'\'" style="background:rgba(255,255,255,0.25);border:none;color:#fff;cursor:pointer;padding:2px 8px;border-radius:3px;white-space:nowrap;flex-shrink:0;">Dismiss</button>' +
+      '</div>';
+  }
+
   function renderAll() {
     renderStatus();
     renderPeriodTabs();
@@ -1619,6 +1716,18 @@
 
     const backend = getReadBackend();
     const analytics = buildAnalytics(backend);
+
+    // Auto integrity check — runs every render, shows banner if issues found
+    const snapshot = backend.getStateSnapshot();
+    const checkIssues = runIntegrityChecks(snapshot.habits || [], snapshot.entries || []);
+    renderHealthBanner(checkIssues);
+    if (checkIssues.length) {
+      checkIssues.forEach(function (i) {
+        (i.level === "error" ? console.error : console.warn)("[Riseloop Health] " + i.msg);
+      });
+    } else {
+      console.log("[Riseloop Health] ✅ " + (snapshot.entries || []).length + " entries — no issues found.");
+    }
 
     renderOverview(analytics);
     renderInsights(analytics);
@@ -1690,6 +1799,499 @@
 
     renderAll();
   }
+
+  // Pre-populated mapping: old habit names (lowercase) → current habit name keywords (lowercase).
+  // User can extend this before running the scanner:
+  //   window.riseloopNameMap["old name"] = "current name"; await riseloopScanSheets();
+  // Multi-map: one old habit name → entries created for MULTIPLE current habits
+  window.riseloopNameMapMulti = window.riseloopNameMapMulti || {
+    "eod check - posting on linkedin & twitter": ["linkedin post", "twitter post"],
+    "eod check - linkedin & twitter": ["linkedin post", "twitter post"]
+  };
+
+  window.riseloopNameMap = window.riseloopNameMap || {
+    "catching up on news": "catching up on news & sunlight exposure",
+    "news": "catching up on news & sunlight exposure",
+    "sunlight exposure": "catching up on news & sunlight exposure",
+    "exercise - resistance training": "exercise - weights",
+    "resistance training": "exercise - weights",
+    "post prandial walk": "twice a day post prandial walk",
+    "post-prandial walk": "twice a day post prandial walk",
+    "office work part 1": "office work",
+    "office work part 2": "office work",
+    "office work - part 1": "office work",
+    "office work - part 2": "office work",
+    "breathing exercise - sleep": "dwp check - breathing exercise - sleep",
+    "plan the next day": "dwp check - planning the next day",
+    "planning the next day": "dwp check - planning the next day",
+    "hit the bed on or before 11 pm": "dwp check - go to sleep before 11:30 pm",
+    "hit the bed on or before 11:10 pm": "dwp check - go to sleep before 11:30 pm",
+    "hit the bed on or before 11:30 pm": "dwp check - go to sleep before 11:30 pm",
+    "eod check - no arguments & duel with spouse": "dwp check - no lengthy phone conversations",
+    "eod check - hydration 5*350ml": "dwp check - drink minimum 2100 ml",
+    "eod check - hydration": "dwp check - drink minimum 2100 ml",
+    "eod check - no consumption of hate": "dwp check - no consumption of hate",
+    "eod check - no consumption of hate, drama": "dwp check - no consumption of hate",
+    "eod check - posting on linkedin & twitter": "linkedin post",
+    "eod check - linkedin & twitter": "linkedin post",
+    "eod check - posting on linkedin": "linkedin post",
+    "eod check - posting on twitter": "twitter post",
+    "eod check - twitter": "twitter post",
+    "eod check - no alcohol": "dwp check - no cheat meal",
+    "no alcohol": "dwp check - no cheat meal",
+    "manifestation - reading affirmations(1)": "manifestation - reading affirmations",
+    "manifestation - reading affirmations(2)": "manifestation - reading affirmations",
+    "manifestation - reading affirmations (1)": "manifestation - reading affirmations",
+    "manifestation - reading affirmations (2)": "manifestation - reading affirmations",
+    "azure cloud deep dive": "build to learn - devops, platform engineering, mlops",
+    "devops deep dive": "build to learn - devops, platform engineering, mlops",
+    "azure devops deep dive": "build to learn - devops, platform engineering, mlops",
+    "learning system design": "system design deep dive",
+    "system design": "system design deep dive",
+    "ai deep dive": "system design deep dive",
+    "eod check - alcohol": "dwp check - no cheat meal",
+    "eod check - drink herbal tea": "dwp check - drinking hearable tea",
+    "eod check - no consumption of hate, drama, gossip, voilence, fake, false content": "dwp check - no consumption of hate, drama, gossip, violence, fake, false content",
+    "eod check - no unnecessary phone conversations": "dwp check - no lengthy phone conversations"
+  };
+
+  window.riseloopScanSheets = async function () {
+    const meta = googleBackend.getMeta();
+    if (!meta.signedIn || !meta.spreadsheetId) {
+      console.error("Not connected to Google Sheets. Connect first, then run riseloopScanSheets().");
+      return null;
+    }
+    const spreadsheetId = meta.spreadsheetId;
+    const habits = googleBackend.listHabits();
+    const nameToHabit = new Map(habits.map(function (h) {
+      return [h.name.toLowerCase().trim(), h];
+    }));
+
+    function resolveHabitByName(rawName) {
+      const lower = rawName.toLowerCase().trim();
+      // 1. Exact match
+      if (nameToHabit.has(lower)) { return { habit: nameToHabit.get(lower), via: "exact" }; }
+      // 2. Hardcoded / user-supplied name map
+      const mapped = window.riseloopNameMap[lower];
+      if (mapped) {
+        const mappedLower = mapped.toLowerCase().trim();
+        // try exact on mapped value first
+        if (nameToHabit.has(mappedLower)) { return { habit: nameToHabit.get(mappedLower), via: "map" }; }
+        // then try contains on mapped value
+        const mapMatches = [];
+        nameToHabit.forEach(function (h, currentName) {
+          if (currentName.includes(mappedLower) || mappedLower.includes(currentName)) { mapMatches.push(h); }
+        });
+        if (mapMatches.length === 1) { return { habit: mapMatches[0], via: "map" }; }
+        if (mapMatches.length > 1) { return { habit: mapMatches[0], via: "map-ambiguous" }; }
+      }
+      // 3. Substring fuzzy match (old name contained in current name, or vice versa) — min 6 chars
+      if (lower.length >= 6) {
+        const fuzzyMatches = [];
+        nameToHabit.forEach(function (h, currentName) {
+          if (currentName.includes(lower) || lower.includes(currentName)) { fuzzyMatches.push(h); }
+        });
+        if (fuzzyMatches.length === 1) { return { habit: fuzzyMatches[0], via: "fuzzy" }; }
+      }
+      return null;
+    }
+
+    console.group("=== Riseloop Sheet Scanner ===");
+    try {
+      const spreadsheet = await window.gapi.client.sheets.spreadsheets.get({ spreadsheetId: spreadsheetId });
+      const sheetTitles = spreadsheet.result.sheets.map(function (s) { return s.properties.title; });
+      console.log("All tabs in your spreadsheet:", sheetTitles);
+
+      const migrateEntries = [];
+      const currentKeys = new Set(
+        (googleBackend.getStateSnapshot().entries || []).map(function (e) { return e.habitId + "::" + e.dateKey; })
+      );
+
+      for (let i = 0; i < sheetTitles.length; i++) {
+        const title = sheetTitles[i];
+        const response = await window.gapi.client.sheets.spreadsheets.values.get({
+          spreadsheetId: spreadsheetId,
+          range: title
+        });
+        const rows = response.result.values || [];
+        const header = (rows[0] || []).map(function (h) { return String(h).toLowerCase().trim(); });
+        const dataRows = rows.slice(1).filter(function (r) { return r && r.length > 0; });
+
+        const isNewEntryFormat = header[0] === "id" && header[1] === "habitid";
+        const isOldLogFormat = header.some(function (h) { return h === "habit" || h === "habit name"; }) ||
+          (dataRows.length > 0 && nameToHabit.has(String((dataRows[0] || [])[1] || "").toLowerCase().trim()));
+
+        console.group('Tab "' + title + '": ' + dataRows.length + ' rows | headers: [' + header.join(", ") + ']');
+
+        if (isNewEntryFormat) {
+          const countByHabit = {};
+          dataRows.forEach(function (r) { countByHabit[r[1]] = (countByHabit[r[1]] || 0) + 1; });
+          const dateRange = dataRows.length
+            ? (dataRows[0][2] || "?") + " → " + (dataRows[dataRows.length - 1][2] || "?")
+            : "no data";
+          console.log("→ Current StudioEntries format. " + dataRows.length + " entries, range: " + dateRange);
+          const matched = Object.keys(countByHabit).filter(function (id) { return habits.some(function (h) { return h.id === id; }); }).length;
+          const orphaned = Object.keys(countByHabit).length - matched;
+          if (orphaned > 0) {
+            console.warn("  " + orphaned + " habitId(s) in this tab do NOT match current habits — those entries are invisible to reports.");
+            Object.keys(countByHabit).forEach(function (id) {
+              if (!habits.some(function (h) { return h.id === id; })) {
+                console.warn("  Orphaned habitId:", id, "(" + countByHabit[id] + " entries)");
+              }
+            });
+          }
+        } else if (isOldLogFormat) {
+          console.log("→ OLD FORMAT detected (entries by habit name). Scanning for importable entries...");
+          let found = 0, skippedDupe = 0, skippedNoMatch = 0;
+          const unmatchedNames = {};
+          const matchedVia = { exact: 0, map: 0, fuzzy: 0 };
+          dataRows.forEach(function (row) {
+            const rawDate = row[0];
+            const habitName = String(row[1] || "").trim();
+            const rawStatus = String(row[2] || "").toLowerCase().trim();
+            const value = row[3];
+            if (!rawDate || !habitName) { return; }
+            const parsed = window.SystemHabitsShared ? window.SystemHabitsShared.parseLogDate(rawDate) : null;
+            if (!parsed) { return; }
+            const dateKey = googleBackend.formatDateKey(parsed);
+            // Check multi-map first (one old habit → multiple new habits)
+            const lowerName = habitName.toLowerCase().trim();
+            const multiTargets = window.riseloopNameMapMulti && window.riseloopNameMapMulti[lowerName];
+            const resolvedList = multiTargets
+              ? multiTargets.map(function (target) {
+                  const tl = target.toLowerCase().trim();
+                  if (nameToHabit.has(tl)) { return { habit: nameToHabit.get(tl), via: "map" }; }
+                  var found2 = null;
+                  nameToHabit.forEach(function (h, cn) { if (cn.includes(tl) || tl.includes(cn)) { found2 = h; } });
+                  return found2 ? { habit: found2, via: "map" } : null;
+                }).filter(Boolean)
+              : (function () { var r = resolveHabitByName(habitName); return r ? [r] : []; })();
+            if (!resolvedList.length) {
+              unmatchedNames[habitName] = (unmatchedNames[habitName] || 0) + 1;
+              skippedNoMatch++;
+              return;
+            }
+            const status = ["done", "logged", "skipped"].includes(rawStatus) ? rawStatus : "done";
+            const numVal = (value != null && value !== "") ? (Number(value) || "") : "";
+            resolvedList.forEach(function (resolved) {
+              const habit = resolved.habit;
+              if (resolved.via !== "exact") { matchedVia[resolved.via === "fuzzy" ? "fuzzy" : "map"]++; }
+              else { matchedVia.exact++; }
+              const key = habit.id + "::" + dateKey;
+              if (currentKeys.has(key)) { skippedDupe++; return; }
+              migrateEntries.push({ habitId: habit.id, dateKey: dateKey, status: status, value: numVal });
+              currentKeys.add(key);
+              found++;
+            });
+          });
+          console.log("  Matched — exact: " + matchedVia.exact + ", via name-map: " + matchedVia.map + ", fuzzy: " + matchedVia.fuzzy);
+          console.log("  Skipped — duplicates already in Sheets: " + skippedDupe + ", no habit match: " + skippedNoMatch);
+          console.log("  Found " + found + " new importable entries (not yet in StudioEntries).");
+          if (Object.keys(unmatchedNames).length > 0) {
+            console.group("  Unmatched old habit names (add to window.riseloopNameMap to recover these entries):");
+            Object.keys(unmatchedNames).sort().forEach(function (n) {
+              console.warn("    " + unmatchedNames[n] + "x  \"" + n + '"');
+            });
+            console.log("\n  To map an unmatched name, run:");
+            console.log('    window.riseloopNameMap["old name here"] = "current habit name here";');
+            console.log("  Then re-run: await riseloopScanSheets()");
+            console.log("\n  Current habit names for reference:");
+            habits.forEach(function (h) { console.log("    • " + h.name); });
+            console.groupEnd();
+          }
+        } else {
+          console.log("→ Unrecognized format.");
+          if (dataRows.length > 0) { console.log("  Sample row:", dataRows[0]); }
+        }
+        console.groupEnd();
+      }
+
+      if (migrateEntries.length > 0) {
+        window._riseloopMigrateEntries = migrateEntries;
+        console.log("\n✅ " + migrateEntries.length + " entries can be imported from old-format tabs.");
+        console.log('Run: await riseloopImportOldEntries()  ← to import them now.');
+      } else {
+        window._riseloopMigrateEntries = null;
+        console.log("\nNo importable old-format entries found in any tab.");
+      }
+    } catch (err) {
+      console.error("Scan failed:", err);
+    }
+    console.groupEnd();
+    return window._riseloopMigrateEntries;
+  };
+
+  window.riseloopImportOldEntries = async function () {
+    const newEntries = window._riseloopMigrateEntries;
+    if (!newEntries || !newEntries.length) {
+      console.error("Nothing to import. Run: await riseloopScanSheets()  first.");
+      return;
+    }
+    const meta = googleBackend.getMeta();
+    if (!meta.signedIn || !meta.spreadsheetId) {
+      console.error("Not connected to Google Sheets.");
+      return;
+    }
+    const spreadsheetId = meta.spreadsheetId;
+    const snapshot = googleBackend.getStateSnapshot();
+    const existing = snapshot.entries || [];
+    console.log("Bulk-importing " + newEntries.length + " entries (existing: " + existing.length + ")...");
+
+    const now = new Date().toISOString();
+    const HEADERS = ["id", "habitId", "dateKey", "status", "value", "note", "updatedAt", "windowAllocations"];
+
+    function entryToRow(e) {
+      return [
+        e.id || "",
+        e.habitId || "",
+        e.dateKey || "",
+        e.status || "done",
+        e.value != null ? e.value : "",
+        e.note || "",
+        e.updatedAt || now,
+        (e.windowAllocations && Object.keys(e.windowAllocations).length)
+          ? JSON.stringify(e.windowAllocations) : ""
+      ];
+    }
+
+    const importRows = newEntries.map(function (e, i) {
+      return entryToRow({
+        id: "import-" + Date.now() + "-" + i,
+        habitId: e.habitId,
+        dateKey: e.dateKey,
+        status: e.status,
+        value: e.value,
+        note: "",
+        updatedAt: now,
+        windowAllocations: {}
+      });
+    });
+
+    const allRows = [HEADERS].concat(existing.map(entryToRow)).concat(importRows);
+    const lastCol = "H";
+    const lastDataRow = allRows.length;
+
+    try {
+      await window.gapi.client.sheets.spreadsheets.values.update({
+        spreadsheetId: spreadsheetId,
+        range: "StudioEntries!A1",
+        valueInputOption: "RAW",
+        resource: { values: allRows }
+      });
+      try {
+        await window.gapi.client.sheets.spreadsheets.values.clear({
+          spreadsheetId: spreadsheetId,
+          range: "StudioEntries!A" + (lastDataRow + 1) + ":" + lastCol + "10000"
+        });
+      } catch (e) { /* harmless — no stale rows to clear */ }
+      window._riseloopMigrateEntries = null;
+      console.log("✅ Import complete — " + newEntries.length + " entries added. Total in sheet: " + (existing.length + newEntries.length) + ". Reloading page to sync from Sheets...");
+      setTimeout(function () { window.location.reload(); }, 1500);
+    } catch (err) {
+      console.error("Import failed:", err);
+    }
+  };
+
+  window.riseloopMigrateAll = async function () {
+    console.log("Step 1: Scanning sheets...");
+    await window.riseloopScanSheets();
+    const entries = window._riseloopMigrateEntries;
+    if (!entries || !entries.length) {
+      console.log("Nothing new to import — all old data is already in StudioEntries.");
+      return;
+    }
+    console.log("Step 2: Importing " + entries.length + " entries in one bulk write...");
+    await window.riseloopImportOldEntries();
+  };
+
+  window.riseloopDebug = function () {
+    const backend = getReadBackend();
+    const snapshot = backend.getStateSnapshot();
+    const habits = backend.listHabits();
+    const allEntries = snapshot.entries || [];
+
+    const habitIdSet = new Set(habits.map(function (h) { return h.id; }));
+    const orphaned = allEntries.filter(function (e) { return !habitIdSet.has(e.habitId); });
+    const orphanGroups = orphaned.reduce(function (map, e) {
+      if (!map[e.habitId]) { map[e.habitId] = []; }
+      map[e.habitId].push(e.dateKey);
+      return map;
+    }, {});
+
+    const localEntries = (function () {
+      if (!localBackend) { return []; }
+      try { return localBackend.getStateSnapshot().entries || []; } catch (x) { return []; }
+    })();
+    const localOnlyEntries = localEntries.filter(function (e) {
+      return !allEntries.some(function (g) { return g.habitId === e.habitId && g.dateKey === e.dateKey; });
+    });
+
+    console.group("=== Riseloop Debug ===");
+    console.log("Google Sheets entries:", allEntries.length, "| Local-only entries:", localOnlyEntries.length);
+    console.log("Current habits:", habits.length);
+
+    console.group("Entry count per habit (Google Sheets)");
+    habits.forEach(function (h) {
+      const count = allEntries.filter(function (e) { return e.habitId === h.id; }).length;
+      console.log(h.name, "| id:", h.id, "| entries:", count);
+    });
+    console.groupEnd();
+
+    if (Object.keys(orphanGroups).length > 0) {
+      console.group("ORPHANED entries (habitId not matching any current habit)");
+      Object.keys(orphanGroups).forEach(function (hid) {
+        const dates = orphanGroups[hid].sort();
+        console.log("habitId:", hid, "| entries:", dates.length, "| range:", dates[0], "→", dates[dates.length - 1]);
+      });
+      console.groupEnd();
+    } else {
+      console.log("No orphaned entries found.");
+    }
+
+    if (localOnlyEntries.length > 0) {
+      console.group("LOCAL-ONLY entries (in localStorage but not in Google Sheets)");
+      const localGroups = localOnlyEntries.reduce(function (map, e) {
+        if (!map[e.habitId]) { map[e.habitId] = []; }
+        map[e.habitId].push(e.dateKey);
+        return map;
+      }, {});
+      Object.keys(localGroups).forEach(function (hid) {
+        const habit = habits.find(function (h) { return h.id === hid; });
+        const dates = localGroups[hid].sort();
+        console.log((habit ? habit.name : "ORPHANED: " + hid), "| entries:", dates.length, "| range:", dates[0], "→", dates[dates.length - 1]);
+      });
+      console.groupEnd();
+    }
+
+    console.groupEnd();
+    return { habits: habits, googleEntries: allEntries, orphanGroups: orphanGroups, localOnlyEntries: localOnlyEntries };
+  };
+
+  // ── Auto-backup to local file every 2 hours ──────────────────────────────
+  (function () {
+    const DB_NAME = "riseloop_backup_db";
+    const STORE = "fileHandles";
+    const KEY = "autoBackupHandle";
+    const INTERVAL_MS = 2 * 60 * 60 * 1000;
+    var _db = null, _handle = null, _timer = null;
+
+    function openDB() {
+      return new Promise(function (resolve, reject) {
+        var req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = function () { req.result.createObjectStore(STORE); };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      });
+    }
+    function getDB() { return _db ? Promise.resolve(_db) : openDB().then(function (d) { _db = d; return d; }); }
+    function txPut(handle) {
+      return getDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction(STORE, "readwrite");
+          tx.objectStore(STORE).put(handle, KEY);
+          tx.oncomplete = resolve; tx.onerror = function () { reject(tx.error); };
+        });
+      });
+    }
+    function txGet() {
+      return getDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction(STORE, "readonly");
+          var req = tx.objectStore(STORE).get(KEY);
+          req.onsuccess = function () { resolve(req.result || null); };
+          req.onerror = function () { reject(req.error); };
+        });
+      });
+    }
+    function txDel() {
+      return getDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction(STORE, "readwrite");
+          tx.objectStore(STORE).delete(KEY);
+          tx.oncomplete = resolve; tx.onerror = function () { reject(tx.error); };
+        });
+      });
+    }
+
+    async function doBackup(handle) {
+      var backend = typeof googleBackend !== "undefined" ? googleBackend : getReadBackend();
+      var meta = backend.getMeta ? backend.getMeta() : {};
+      if (!meta.signedIn) { return; }
+      var snap = backend.getStateSnapshot();
+      var payload = JSON.stringify({
+        exportedAt: new Date().toISOString(),
+        spreadsheetId: meta.spreadsheetId || "",
+        habitCount: (snap.habits || []).length,
+        entryCount: (snap.entries || []).length,
+        habits: snap.habits || [],
+        entries: snap.entries || []
+      }, null, 2);
+      try {
+        var writable = await handle.createWritable();
+        await writable.write(payload);
+        await writable.close();
+        var t = new Date().toLocaleTimeString();
+        console.log("[Riseloop Backup] ✅ " + (snap.entries || []).length + " entries saved at " + t);
+        var btn = document.getElementById("riseloop-backup-btn");
+        if (btn) { btn.title = "Last backup: " + t + " — click to change file"; }
+      } catch (err) {
+        console.warn("[Riseloop Backup] Write failed:", err.message);
+      }
+    }
+
+    function startSchedule(handle) {
+      if (_timer) { clearInterval(_timer); }
+      _handle = handle;
+      doBackup(handle);
+      _timer = setInterval(function () { doBackup(handle); }, INTERVAL_MS);
+      console.log("[Riseloop Backup] Scheduled every 2 h.");
+      setButtonActive(true);
+    }
+
+    function setButtonActive(on) {
+      var btn = document.getElementById("riseloop-backup-btn");
+      if (!btn) { return; }
+      btn.textContent = on ? "⏱ Backup ON" : "💾 Auto-backup";
+      btn.style.background = on ? "#27ae60" : "";
+      btn.style.color = on ? "#fff" : "";
+    }
+
+    window.riseloopSetupBackup = async function () {
+      if (!window.showSaveFilePicker) {
+        alert("Auto-backup requires Chrome or Edge (File System Access API).");
+        return;
+      }
+      var handle;
+      try {
+        handle = await window.showSaveFilePicker({
+          suggestedName: "riseloop-backup.json",
+          types: [{ description: "JSON backup", accept: { "application/json": [".json"] } }]
+        });
+      } catch (e) { if (e.name !== "AbortError") { console.warn(e); } return; }
+      await txPut(handle);
+      startSchedule(handle);
+    };
+
+    window.riseloopDisableBackup = async function () {
+      if (_timer) { clearInterval(_timer); _timer = null; }
+      _handle = null;
+      await txDel();
+      setButtonActive(false);
+      console.log("[Riseloop Backup] Disabled.");
+    };
+
+    // On page load: restore saved handle and restart schedule automatically
+    setTimeout(async function () {
+      try {
+        var saved = await txGet();
+        if (!saved) { return; }
+        var perm = await saved.queryPermission({ mode: "readwrite" });
+        if (perm !== "granted") { perm = await saved.requestPermission({ mode: "readwrite" }); }
+        if (perm === "granted") { startSchedule(saved); } else { await txDel(); }
+      } catch (e) { /* handle may be stale — silently skip */ }
+    }, 2500);
+  })();
+  // ─────────────────────────────────────────────────────────────────────────
 
   initializeReports();
 })(window, document);

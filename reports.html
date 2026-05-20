@@ -384,7 +384,7 @@
 
     .chart-stats {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       margin-top: 14px;
     }
@@ -551,6 +551,7 @@
           <button class="primary-button" type="button" id="connectButton">Connect Google Sheets</button>
           <button class="secondary-button" type="button" id="syncButton">Sync now</button>
           <button class="ghost-button" type="button" id="signOutButton">Sign out</button>
+          <button class="ghost-button" type="button" id="riseloop-backup-btn" onclick="riseloopSetupBackup()" title="Auto-save all data to a file on your laptop every 2 hours">💾 Auto-backup</button>
         </div>
         <div class="hero-meta" id="backendMeta">
           Reports will read the same live backend as your daily board, so your trends and insights stay consistent with what you log every day.
@@ -662,8 +663,8 @@
   <script src="system_habits_backend.local.js?v=20260407-checkboxhistory1"></script>
   <script src="system_habits_config.local.js"></script>
   <script src="system_habits_shared.js?v=20260326-resetfix2"></script>
-  <script src="system_habits_backend.google.js?v=20260407-checkboxhistory1"></script>
-  <script src="system_habits_reports.js?v=20260409-windowtrendfix1"></script>
+  <script src="system_habits_backend.google.js?v=20260508-guardian1"></script>
+  <script src="system_habits_reports.js?v=20260508-autobackup1"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 </body>
