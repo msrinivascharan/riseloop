@@ -201,7 +201,8 @@
       updatedAt: new Date().toISOString(),
       repeatWindows: repeatWindows,
       repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type),
-      savedAt: habit.savedAt || null
+      savedAt: habit.savedAt || null,
+      enabled: habit.enabled !== false
     };
   }
 
@@ -291,11 +292,15 @@
   }
 
   function listHabits() {
+    return readState().habits.filter((h) => h.enabled !== false).sort(compareHabits);
+  }
+
+  function listAllHabits() {
     return readState().habits.slice().sort(compareHabits);
   }
 
   function getHabit(id) {
-    return listHabits().find((habit) => habit.id === id) || null;
+    return readState().habits.find((habit) => habit.id === id) || null;
   }
 
   function saveHabit(habitInput) {
@@ -588,6 +593,7 @@
     getStats: getStats,
     listEntriesForDate: listEntriesForDate,
     listHabits: listHabits,
+    listAllHabits: listAllHabits,
     listHabitsForDate: listHabitsForDate,
     listWindowsForDate: listWindowsForDate,
     saveEntry: saveEntry,

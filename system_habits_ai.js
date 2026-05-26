@@ -275,7 +275,7 @@
   // ── Shared stats builder ──────────────────────────────────────────────────
   function buildHabitStats(days) {
     const snapshot   = backend.getStateSnapshot();
-    const allHabits  = snapshot.habits;
+    const allHabits  = snapshot.habits.filter(function (h) { return h.enabled !== false; });
     const allEntries = snapshot.entries;
 
     const stats = allHabits.map(function (h) {

@@ -2140,7 +2140,10 @@
   }
 
   function renderHabitLibrary() {
-    const habits = getReadBackend().listHabits();
+    const backend = getReadBackend();
+    const habits = typeof backend.listAllHabits === "function"
+      ? backend.listAllHabits()
+      : backend.listHabits();
 
     if (habits.length === 0) {
       elements.emptyLibrary.hidden = false;
@@ -2151,41 +2154,35 @@
     elements.emptyLibrary.hidden = true;
     elements.habitList.innerHTML = habits
       .map((habit) => {
+        const isEnabled = habit.enabled !== false;
         const habitModeText = habit.type === "measurable"
           ? getHabitTimerSupportText(habit)
           : "Checkbox habit";
 
         return `
-        <article class="habit-card" data-habit-id="${escapeHtml(habit.id)}">
+        <article class="habit-card${isEnabled ? "" : " habit-card--disabled"}" data-habit-id="${escapeHtml(habit.id)}">
           <div class="habit-card-head">
             <div>
-              <div class="habit-card-title">${escapeHtml(habit.name)}</div>
+              <div class="habit-card-title">${escapeHtml(habit.name)}${isEnabled ? "" : ' <span class="habit-disabled-badge">Disabled</span>'}</div>
               <div class="habit-card-subtitle">${escapeHtml(habit.category)} · ${escapeHtml(habitModeText)}</div>
             </div>
             <div class="habit-card-actions">
               <button type="button" class="ghost-button" data-action="edit">Edit</button>
+              ${isEnabled
+                ? `<button type="button" class="ghost-button warning" data-action="disable">Disable</button>`
+                : `<button type="button" class="ghost-button success" data-action="enable">Enable</button>`}
               <button type="button" class="ghost-button danger" data-action="delete">Delete</button>
             </div>
           </div>
+          ${isEnabled ? `
           <div class="habit-card-grid">
-            <div>
-              <span class="label">Window</span>
-              <strong>${escapeHtml(buildHabitWindowText(habit))}</strong>
-            </div>
-            <div>
-              <span class="label">Target</span>
-              <strong>${escapeHtml(buildTargetText(habit))}</strong>
-            </div>
-            <div>
-              <span class="label">Days</span>
-              <strong>${escapeHtml(formatDays(habit.activeDays))}</strong>
-            </div>
-            <div>
-              <span class="label">Mode</span>
-              <strong>${escapeHtml(habitModeText)}</strong>
-            </div>
+            <div><span class="label">Window</span><strong>${escapeHtml(buildHabitWindowText(habit))}</strong></div>
+            <div><span class="label">Target</span><strong>${escapeHtml(buildTargetText(habit))}</strong></div>
+            <div><span class="label">Days</span><strong>${escapeHtml(formatDays(habit.activeDays))}</strong></div>
+            <div><span class="label">Mode</span><strong>${escapeHtml(habitModeText)}</strong></div>
           </div>
           ${habit.notes ? `<p class="habit-card-notes">${escapeHtml(habit.notes)}</p>` : ""}
+          ` : ""}
         </article>
       `;
       })
@@ -2427,6 +2424,34 @@
         console.error(error);
         window.alert(error && error.message ? error.message : "Could not delete the habit from Google Sheets.");
       }
+    }
+
+    if (action === "disable") {
+      if (!ensureWritable("disabling habits")) {
+        return;
+      }
+      try {
+        await Promise.resolve(getWriteBackend().saveHabit({ ...habit, enabled: false }));
+        render();
+      } catch (error) {
+        console.error(error);
+        window.alert(error && error.message ? error.message : "Could not disable the habit.");
+      }
+      return;
+    }
+
+    if (action === "enable") {
+      if (!ensureWritable("enabling habits")) {
+        return;
+      }
+      try {
+        await Promise.resolve(getWriteBackend().saveHabit({ ...habit, enabled: true }));
+        render();
+      } catch (error) {
+        console.error(error);
+        window.alert(error && error.message ? error.message : "Could not enable the habit.");
+      }
+      return;
     }
   }
 

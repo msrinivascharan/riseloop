@@ -335,6 +335,32 @@
       color: var(--danger);
     }
 
+    .ghost-button.warning {
+      color: #b45309;
+    }
+
+    .ghost-button.success {
+      color: #15803d;
+    }
+
+    .habit-card--disabled {
+      opacity: 0.45;
+    }
+
+    .habit-disabled-badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: rgba(0,0,0,0.08);
+      color: var(--text-muted, #888);
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
     .toggle-action.done {
       color: var(--accent-strong);
       background: rgba(230, 243, 234, 0.9);
@@ -1836,11 +1862,11 @@
     </main>
   </div>
 
-  <script src="system_habits_backend.local.js?v=20260407-checkboxhistory1"></script>
+  <script src="system_habits_backend.local.js?v=20260526-disable1"></script>
   <script src="system_habits_config.local.js"></script>
   <script src="system_habits_shared.js?v=20260326-resetfix2"></script>
-  <script src="system_habits_backend.google.js?v=20260508-guardian1"></script>
-  <script src="system_habits_app.js?v=20260326-resetfix2"></script>
+  <script src="system_habits_backend.google.js?v=20260526-disable1"></script>
+  <script src="system_habits_app.js?v=20260526-disable1"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 </body>

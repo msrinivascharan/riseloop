@@ -32,7 +32,8 @@
         "updatedAt",
         "repeatWindows",
         "repeatWindowTargets",
-        "savedAt"
+        "savedAt",
+        "enabled"
       ]
     },
     entries: {
@@ -363,7 +364,8 @@
       updatedAt: new Date().toISOString(),
       repeatWindows: repeatWindows,
       repeatWindowTargets: normalizeRepeatWindowTargets(habit.repeatWindowTargets, repeatWindows, type),
-      savedAt: habit.savedAt || null
+      savedAt: habit.savedAt || null,
+      enabled: habit.enabled !== false
     };
   }
 
@@ -406,11 +408,15 @@
   }
 
   function listHabits() {
+    return state.habits.filter((h) => h.enabled !== false).sort(compareHabits);
+  }
+
+  function listAllHabits() {
     return state.habits.slice().sort(compareHabits);
   }
 
   function getHabit(id) {
-    return listHabits().find((habit) => habit.id === id) || null;
+    return state.habits.find((habit) => habit.id === id) || null;
   }
 
   function getDayKey(dateLike) {
@@ -915,7 +921,8 @@
         updatedAt: row[11],
         repeatWindows: row[12],
         repeatWindowTargets: row[13],
-        savedAt: row[14] || null
+        savedAt: row[14] || null,
+        enabled: row[15] !== "false"
       }))
       .filter(Boolean);
   }
@@ -954,7 +961,8 @@
       Object.keys(habit.repeatWindowTargets || {}).length
         ? JSON.stringify(habit.repeatWindowTargets)
         : "",
-      habit.savedAt || ""
+      habit.savedAt || "",
+      habit.enabled !== false ? "true" : "false"
     ]);
   }
 
@@ -1249,6 +1257,7 @@
     initialize: initialize,
     listEntriesForDate: listEntriesForDate,
     listHabits: listHabits,
+    listAllHabits: listAllHabits,
     listHabitsForDate: listHabitsForDate,
     listWindowsForDate: listWindowsForDate,
     saveEntry: saveEntry,
