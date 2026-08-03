@@ -129,3 +129,108 @@
     parseLogSheet: parseLogSheet
   };
 })(window);
+
+/* ------------------------------------------------------------------ *
+ * Toast notifications — a non-blocking, themed replacement for the
+ * blocking window.alert() used across the app. Self-contained: injects
+ * its own styles and container, and overrides window.alert so every
+ * existing alert() call becomes a toast. No other code needs to change.
+ * ------------------------------------------------------------------ */
+(function (window) {
+  "use strict";
+  var doc = window.document;
+  if (!doc) { return; }
+
+  var STYLE_ID = "riseloop-toast-style";
+  var CONTAINER_ID = "riseloop-toast-container";
+  var activeToasts = {};
+
+  function ensureStyle() {
+    if (doc.getElementById(STYLE_ID)) { return; }
+    var css =
+      "#" + CONTAINER_ID + "{position:fixed;top:16px;right:16px;z-index:99999;" +
+      "display:flex;flex-direction:column;gap:10px;" +
+      "max-width:min(360px,calc(100vw - 32px));pointer-events:none;}" +
+      ".riseloop-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;" +
+      "padding:12px 14px;border-radius:14px;background:var(--paper-strong,#fff);" +
+      "color:var(--text,#33291d);border:1px solid var(--line,rgba(198,143,92,.22));" +
+      "border-left:4px solid var(--danger,#e2674f);box-shadow:0 12px 30px rgba(120,70,20,.16);" +
+      "font:600 0.9rem/1.4 var(--font-main,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);" +
+      "letter-spacing:-0.01em;opacity:0;transform:translateX(12px);" +
+      "transition:opacity .25s ease,transform .25s ease;cursor:pointer;}" +
+      ".riseloop-toast.show{opacity:1;transform:none;}" +
+      ".riseloop-toast .rt-ico{flex:none;font-size:1rem;line-height:1.35;}" +
+      ".riseloop-toast .rt-msg{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;}" +
+      "@media (prefers-reduced-motion:reduce){.riseloop-toast{transition:none;}}";
+    var style = doc.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = css;
+    (doc.head || doc.documentElement).appendChild(style);
+  }
+
+  function ensureContainer() {
+    var c = doc.getElementById(CONTAINER_ID);
+    if (!c) {
+      c = doc.createElement("div");
+      c.id = CONTAINER_ID;
+      c.setAttribute("role", "status");
+      c.setAttribute("aria-live", "polite");
+      (doc.body || doc.documentElement).appendChild(c);
+    }
+    return c;
+  }
+
+  function showToast(message, options) {
+    options = options || {};
+    ensureStyle();
+    var container = ensureContainer();
+
+    // De-duplicate: if the same message is already showing, refresh its timer
+    // instead of stacking another identical toast.
+    var text = String(message == null ? "" : message);
+    if (activeToasts[text]) { activeToasts[text].bump(); return activeToasts[text].dismiss; }
+
+    var toast = doc.createElement("div");
+    toast.className = "riseloop-toast";
+
+    var ico = doc.createElement("span");
+    ico.className = "rt-ico";
+    ico.textContent = options.icon || "⚠️";
+
+    var msg = doc.createElement("span");
+    msg.className = "rt-msg";
+    msg.textContent = text;
+
+    toast.appendChild(ico);
+    toast.appendChild(msg);
+    container.appendChild(toast);
+
+    // Fade/slide in (setTimeout, not rAF, so it also works in background tabs).
+    window.setTimeout(function () { toast.classList.add("show"); }, 10);
+
+    var timer = null;
+    var ms = typeof options.duration === "number" ? options.duration : 5000;
+    function dismiss() {
+      if (timer) { window.clearTimeout(timer); timer = null; }
+      delete activeToasts[text];
+      toast.classList.remove("show");
+      window.setTimeout(function () {
+        if (toast.parentNode) { toast.parentNode.removeChild(toast); }
+      }, 260);
+    }
+    function bump() { if (ms > 0) { if (timer) { window.clearTimeout(timer); } timer = window.setTimeout(dismiss, ms); } }
+    toast.addEventListener("click", dismiss);
+
+    activeToasts[text] = { dismiss: dismiss, bump: bump };
+    if (ms > 0) { timer = window.setTimeout(dismiss, ms); }
+    return dismiss;
+  }
+
+  // Public helper + drop-in, non-blocking replacement for alert().
+  window.riseloopToast = showToast;
+  var nativeAlert = window.alert;
+  window.alert = function (message) {
+    try { showToast(message); }
+    catch (e) { try { nativeAlert.call(window, message); } catch (e2) {} }
+  };
+})(window);

@@ -7,23 +7,23 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg-top: #fff7ed;
-      --bg-mid: #eef7ef;
-      --bg-bottom: #f8efe3;
-      --paper: rgba(255, 255, 255, 0.82);
-      --paper-strong: rgba(255, 255, 255, 0.94);
-      --paper-soft: rgba(255, 255, 255, 0.68);
-      --line: rgba(91, 112, 95, 0.12);
-      --text: #203128;
-      --muted: #718076;
-      --accent: #649f7d;
-      --accent-strong: #3f7559;
-      --accent-soft: #e6f3ea;
-      --warm: #f5bb86;
-      --rose: #f2a39b;
-      --rose-soft: #fde7e3;
+      --bg-top: #fef3e5;
+      --bg-mid: #fde7cf;
+      --bg-bottom: #fdeede;
+      --paper: rgba(255, 255, 255, 0.9);
+      --paper-strong: rgba(255, 255, 255, 0.96);
+      --paper-soft: rgba(255, 255, 255, 0.72);
+      --line: rgba(198, 143, 92, 0.20);
+      --text: #34291d;
+      --muted: #8a7663;
+      --accent: #f5991f;
+      --accent-strong: #b45309;
+      --accent-soft: #fdecd4;
+      --warm: #f5a623;
+      --rose: #ef8a72;
+      --rose-soft: #fce4dd;
       --sky: #cfe5f5;
-      --shadow: 0 28px 80px rgba(100, 118, 98, 0.12);
+      --shadow: 0 28px 80px rgba(196, 120, 44, 0.14);
       --radius-xxl: 34px;
       --radius-xl: 28px;
       --radius-lg: 20px;
@@ -202,13 +202,13 @@
     .button-link {
       background: rgba(255, 255, 255, 0.88);
       color: var(--text);
-      border: 1px solid rgba(91, 112, 95, 0.14);
+      border: 1px solid rgba(192, 142, 98, 0.14);
     }
 
     .primary-button {
-      background: linear-gradient(180deg, #6ca683, #568f70);
+      background: linear-gradient(180deg, #f9ab3c, #ef8f16);
       color: white;
-      box-shadow: 0 12px 24px rgba(86, 143, 112, 0.2);
+      box-shadow: 0 12px 24px rgba(230, 138, 30, 0.2);
     }
 
     .ghost-button { color: var(--accent-strong); }
@@ -282,9 +282,9 @@
     }
 
     .period-button.active {
-      background: linear-gradient(180deg, #6ca683, #568f70);
+      background: linear-gradient(180deg, #f9ab3c, #ef8f16);
       color: white;
-      box-shadow: 0 10px 22px rgba(86, 143, 112, 0.18);
+      box-shadow: 0 10px 22px rgba(230, 138, 30, 0.18);
     }
 
     .insight-card strong,
@@ -400,7 +400,7 @@
       margin-top: 16px;
       padding: 18px;
       border-radius: var(--radius-md);
-      border: 1px dashed rgba(91, 112, 95, 0.22);
+      border: 1px dashed rgba(192, 142, 98, 0.22);
       color: var(--muted);
       font-size: 0.88rem;
       text-align: center;
@@ -472,7 +472,7 @@
       width: 100%;
       height: 12px;
       border-radius: 999px;
-      background: rgba(100, 159, 125, 0.14);
+      background: rgba(245, 153, 31, 0.14);
       overflow: hidden;
     }
 
@@ -480,13 +480,13 @@
       display: block;
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #79b18e, #4d8f74);
+      background: linear-gradient(90deg, #f9ab3c, #ef8f16);
     }
 
     .empty-state {
       padding: 24px;
       border-radius: var(--radius-lg);
-      border: 1px dashed rgba(91, 112, 95, 0.2);
+      border: 1px dashed rgba(192, 142, 98, 0.2);
       background: rgba(255, 255, 255, 0.56);
       color: var(--muted);
       line-height: 1.65;
@@ -662,9 +662,9 @@
 
   <script src="system_habits_backend.local.js?v=20260526-disable1"></script>
   <script src="system_habits_config.local.js"></script>
-  <script src="system_habits_shared.js?v=20260326-resetfix2"></script>
+  <script src="system_habits_shared.js?v=20260803-toast2"></script>
   <script src="system_habits_backend.google.js?v=20260526-disable1"></script>
-  <script src="system_habits_reports.js?v=20260508-autobackup1"></script>
+  <script src="system_habits_reports.js?v=20260724-warm1"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 </body>

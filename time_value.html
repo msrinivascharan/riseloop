@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Riseloop · Time Value</title>
+  <style>
+    :root {
+      --bg-top: #fef3e5;
+      --bg-mid: #fde7cf;
+      --bg-bottom: #fdeede;
+      --paper: #ffffff;
+      --paper-soft: #fdf5ec;
+      --line: rgba(198, 143, 92, 0.20);
+      --line-soft: rgba(198, 143, 92, 0.12);
+      --text: #34291d;
+      --muted: #8a7663;
+      --accent: #f5991f;
+      --accent-strong: #b45309;
+      --accent-soft: #fdecd4;
+      --shadow: 0 12px 34px rgba(196, 120, 44, 0.13);
+      --shadow-soft: 0 4px 14px rgba(196, 120, 44, 0.08);
+      --radius-xl: 18px;
+      --radius-lg: 14px;
+      --radius-sm: 10px;
+      /* Value tiers */
+      --t-invests: #6fa844;   --t-invests-strong: #4c8438;   --t-invests-soft: #e9f4dc;
+      --t-recharges: #4a90d2; --t-recharges-strong: #2f72bb; --t-recharges-soft: #e3eefa;
+      --t-maintains: #f4b330; --t-maintains-strong: #955a05; --t-maintains-soft: #fdf1d2;
+      --t-drains: #ef6b53;    --t-drains-strong: #d24d37;    --t-drains-soft: #fde4de;
+      --t-unaccounted: #c9b7a6;
+      --font-main: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 15px; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--font-main);
+      color: var(--text);
+      letter-spacing: -0.01em;
+      background:
+        radial-gradient(1100px 560px at 100% -8%, rgba(245, 166, 45, 0.12), transparent 60%),
+        radial-gradient(900px 500px at 0% 110%, rgba(240, 150, 90, 0.09), transparent 60%),
+        linear-gradient(180deg, var(--bg-top), var(--bg-mid) 55%, var(--bg-bottom));
+      background-attachment: fixed;
+    }
+    button, input, select { font: inherit; }
+    button { border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .page-shell { width: min(1200px, calc(100% - 40px)); margin: 0 auto; padding: 20px 0 64px; }
+
+    /* Top bar */
+    .topbar {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      padding: 11px 16px; background: var(--paper); border: 1px solid var(--line);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); margin-bottom: 14px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark {
+      display: grid; place-items: center; width: 38px; height: 38px; flex: none;
+      border-radius: 11px; background: linear-gradient(150deg, #f7bb3d, #e07d10);
+      color: #fff; font-size: 1.15rem; font-weight: 800; box-shadow: 0 6px 16px rgba(176, 90, 20, 0.26);
+    }
+    .brand-name { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.035em; line-height: 1.1; }
+    .brand-sub { font-size: 0.76rem; color: var(--muted); }
+    .topbar-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      min-height: 38px; padding: 8px 15px; border-radius: 999px; font-weight: 700; font-size: 0.86rem;
+      background: rgba(255,255,255,0.9); color: var(--text); border: 1px solid var(--line);
+      text-decoration: none; transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.primary { background: linear-gradient(180deg, #f9ab3c, #ef8f16); color: #fff; border: 0; box-shadow: 0 10px 22px rgba(230,138,30,.26); }
+    .btn.ghost { background: transparent; border-color: transparent; color: var(--accent-strong); }
+    .btn.sm { min-height: 32px; padding: 6px 12px; font-size: 0.8rem; }
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px;
+      background: var(--accent-soft); color: var(--accent-strong); font-size: 0.8rem; font-weight: 700; white-space: nowrap;
+    }
+
+    .card {
+      background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-xl);
+      box-shadow: var(--shadow); padding: 22px; margin-bottom: 16px;
+    }
+    .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+    .card-head h2 { margin: 0; font-size: 1.08rem; letter-spacing: -0.03em; }
+    .card-head p { margin: 5px 0 0; font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+    .grid-2 { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1fr); gap: 16px; align-items: start; }
+
+    /* Date toolbar */
+    .date-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    input[type="date"], input[type="number"], input[type="text"], select {
+      min-height: 38px; padding: 8px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--line); background: rgba(255,255,255,0.95); color: var(--text); outline: none;
+    }
+    input:focus, select:focus { border-color: rgba(217,119,11,.5); box-shadow: 0 0 0 4px rgba(245,153,31,.14); }
+
+    /* ---- Dashboard ---- */
+    .dash-top { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 22px; align-items: center; }
+    .score-ring {
+      --p: 0%;
+      width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center; flex: none;
+      background: radial-gradient(circle at center, #fff 0 60%, transparent 61%),
+                 conic-gradient(var(--accent) var(--p), rgba(245,153,31,.12) 0);
+      box-shadow: inset 0 0 0 1px rgba(245,153,31,.1);
+    }
+    .score-ring .val { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.05em; line-height: 1; }
+    .score-ring .lbl { font-size: 0.66rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: 3px; }
+    .dash-side { display: grid; gap: 12px; min-width: 0; }
+    .daybar { display: flex; height: 26px; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--line-soft); background: var(--paper-soft); }
+    .daybar > span { height: 100%; transition: width .3s ease; }
+    .daybar-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 0.78rem; color: var(--muted); }
+    .daybar-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+    .daybar-legend .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+
+    .tier-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 18px; }
+    .tier-card { padding: 13px 14px; border-radius: var(--radius-lg); border: 1px solid var(--line-soft); background: var(--paper-soft); position: relative; overflow: hidden; }
+    .tier-card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; }
+    .tier-card[data-tier="invests"]::before { background: var(--t-invests); }
+    .tier-card[data-tier="recharges"]::before { background: var(--t-recharges); }
+    .tier-card[data-tier="maintains"]::before { background: var(--t-maintains); }
+    .tier-card[data-tier="drains"]::before { background: var(--t-drains); }
+    .tier-head { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+    .tier-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .tier-hours { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.04em; }
+    .tier-sub { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
+
+    .money-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-top: 16px; }
+    .money-card { padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid var(--line-soft); text-align: center; }
+    .money-card .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+    .money-card .v { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; }
+    .money-card.created { background: var(--t-invests-soft); } .money-card.created .v { color: var(--t-invests-strong); }
+    .money-card.drained { background: var(--t-drains-soft); } .money-card.drained .v { color: var(--t-drains-strong); }
+    .money-card.unbudget { background: var(--paper-soft); } .money-card.unbudget .v { color: var(--muted); }
+
+    /* Trend */
+    .trend { display: flex; align-items: flex-end; gap: 8px; height: 90px; margin-top: 6px; }
+    .trend .bar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+    .trend .fill { width: 70%; max-width: 30px; border-radius: 6px 6px 0 0; background: linear-gradient(180deg, var(--accent), var(--accent-strong)); transition: height .3s ease; }
+    .trend .day { font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
+
+    /* Logger */
+    .add-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .add-row select { flex: 1 1 190px; min-width: 150px; }
+    .add-row .mins { width: 92px; }
+    .mode-toggle { display: inline-flex; background: var(--paper-soft); border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+    .mode-btn { padding: 6px 12px; border-radius: 999px; background: transparent; color: var(--muted); font-weight: 700; font-size: 0.8rem; }
+    .mode-btn.active { background: linear-gradient(180deg, #f9ab3c, #ef8f16); color: #fff; }
+    .range-inputs { display: inline-flex; align-items: center; gap: 6px; }
+    .range-inputs input[type="time"] { width: 116px; }
+    .dash { color: var(--muted); }
+    .import-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 12px; background: var(--paper-soft); border: 1px solid var(--line-soft); border-radius: var(--radius-lg); }
+    .import-row .imp-label { font-weight: 700; font-size: 0.85rem; color: var(--accent-strong); }
+    .import-row input[type="date"] { min-height: 34px; padding: 6px 10px; }
+    .import-row .imp-hint { font-size: 0.76rem; color: var(--muted); flex: 1 1 100%; }
+    .entry-list { display: grid; gap: 8px; }
+    .entry {
+      display: grid; grid-template-columns: auto minmax(0,1fr) auto auto auto; gap: 10px; align-items: center;
+      padding: 9px 12px; border-radius: var(--radius-sm); background: var(--paper-soft); border: 1px solid var(--line-soft);
+    }
+    .entry .e-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+    .entry .e-name { font-weight: 700; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .entry .e-name .src { font-size: 0.68rem; color: var(--muted); font-weight: 600; margin-left: 6px; }
+    .entry .e-time { font-weight: 700; font-size: 0.88rem; white-space: nowrap; }
+    .entry .e-money { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+    .entry .e-del { background: transparent; border: 0; color: var(--t-drains-strong); font-size: 1.05rem; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+    .entry .e-del:hover { background: var(--t-drains-soft); }
+    .day-total { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+    .empty { padding: 16px; border-radius: var(--radius-lg); border: 1px dashed var(--line); color: var(--muted); font-size: 0.88rem; text-align: center; }
+
+    /* Library */
+    details.lib { border: 1px solid var(--line); border-radius: var(--radius-xl); background: var(--paper); box-shadow: var(--shadow); overflow: hidden; }
+    details.lib > summary { list-style: none; cursor: pointer; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    details.lib > summary::-webkit-details-marker { display: none; }
+    details.lib > summary h2 { margin: 0; font-size: 1.05rem; }
+    .lib-body { padding: 0 22px 22px; }
+    .lib-list { display: grid; gap: 8px; margin-bottom: 14px; }
+    .lib-item { display: grid; grid-template-columns: minmax(0,1fr) 150px auto; gap: 10px; align-items: center; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--paper-soft); border: 1px solid var(--line-soft); }
+    .lib-item .l-name { font-weight: 700; font-size: 0.9rem; }
+    .lib-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+    .lib-add input { flex: 1 1 160px; }
+    .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .settings-row label { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+    .tier-pill { display:inline-flex; align-items:center; gap:6px; }
+
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .tier-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .money-row { grid-template-columns: 1fr; }
+      .dash-top { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">R</span>
+        <div>
+          <div class="brand-name">Time Value</div>
+          <div class="brand-sub">If time is money — where is yours going?</div>
+        </div>
+      </div>
+      <nav class="topbar-nav">
+        <span class="status-chip" id="tvBackendStatus">Local mode</span>
+        <button class="btn sm" type="button" id="tvConnectBtn">Connect Google Sheets</button>
+        <a class="btn" href="index.html">← Board</a>
+        <a class="btn" href="reports.html">Reports</a>
+        <a class="btn" href="ai_insights.html">AI</a>
+      </nav>
+    </header>
+
+    <!-- Dashboard -->
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>How well did you spend your 24 hours?</h2>
+          <p>Every day is 1,440 minutes to invest. Log where your time went below — habits import automatically.</p>
+        </div>
+        <div class="date-toolbar" style="margin:0;">
+          <button class="btn sm" type="button" id="tvPrevDay">‹ Prev</button>
+          <button class="btn sm" type="button" id="tvTodayBtn">Today</button>
+          <button class="btn sm" type="button" id="tvNextDay">Next ›</button>
+          <input type="date" id="tvDate" />
+        </div>
+      </div>
+
+      <div class="dash-top">
+        <div class="score-ring" id="tvScoreRing">
+          <div style="text-align:center;">
+            <div class="val" id="tvScore">0</div>
+            <div class="lbl">Day quality</div>
+          </div>
+        </div>
+        <div class="dash-side">
+          <div class="daybar" id="tv24hBar"></div>
+          <div class="daybar-legend" id="tv24hLegend"></div>
+        </div>
+      </div>
+
+      <div class="tier-grid" id="tvTierGrid">
+        <div class="tier-card" data-tier="invests">
+          <div class="tier-head"><span class="tier-dot" style="background:var(--t-invests)"></span>Invests</div>
+          <div class="tier-hours" data-tier-hours>0h</div>
+          <div class="tier-sub"><span data-tier-pct>0%</span> · <span data-tier-money>—</span></div>
+        </div>
+        <div class="tier-card" data-tier="recharges">
+          <div class="tier-head"><span class="tier-dot" style="background:var(--t-recharges)"></span>Recharges</div>
+          <div class="tier-hours" data-tier-hours>0h</div>
+          <div class="tier-sub"><span data-tier-pct>0%</span> · <span data-tier-money>—</span></div>
+        </div>
+        <div class="tier-card" data-tier="maintains">
+          <div class="tier-head"><span class="tier-dot" style="background:var(--t-maintains)"></span>Maintains</div>
+          <div class="tier-hours" data-tier-hours>0h</div>
+          <div class="tier-sub"><span data-tier-pct>0%</span> · <span data-tier-money>—</span></div>
+        </div>
+        <div class="tier-card" data-tier="drains">
+          <div class="tier-head"><span class="tier-dot" style="background:var(--t-drains)"></span>Drains</div>
+          <div class="tier-hours" data-tier-hours>0h</div>
+          <div class="tier-sub"><span data-tier-pct>0%</span> · <span data-tier-money>—</span></div>
+        </div>
+      </div>
+
+      <div class="money-row">
+        <div class="money-card created"><div class="k">Value created</div><div class="v" id="tvMoneyCreated">—</div></div>
+        <div class="money-card drained"><div class="k">Time drained</div><div class="v" id="tvMoneyDrained">—</div></div>
+        <div class="money-card unbudget"><div class="k">Unaccounted</div><div class="v" id="tvUnaccounted">—</div></div>
+      </div>
+    </section>
+
+    <div class="grid-2">
+      <!-- Logger -->
+      <section class="card">
+        <div class="card-head">
+          <div><h2>Log your time</h2><p>Enter minutes, or switch to Start–End and it works out the duration.</p></div>
+        </div>
+        <div class="add-row">
+          <select id="tvActivitySelect"></select>
+          <div class="mode-toggle" role="group" aria-label="Entry mode">
+            <button type="button" class="mode-btn active" data-mode="duration">Minutes</button>
+            <button type="button" class="mode-btn" data-mode="range">Start–End</button>
+          </div>
+          <input class="mins" type="number" id="tvMinutes" min="1" step="5" placeholder="mins" />
+          <span class="range-inputs" id="tvRangeInputs" hidden>
+            <input type="time" id="tvStart" aria-label="Start time" />
+            <span class="dash">→</span>
+            <input type="time" id="tvEnd" aria-label="End time" />
+          </span>
+          <button class="btn primary" type="button" id="tvAddBtn">Add</button>
+        </div>
+        <div class="import-row">
+          <span class="imp-label">⟳ Import</span>
+          <select id="tvImportCategory" aria-label="Habit category to import">
+            <option value="">All categories</option>
+          </select>
+          <button class="btn sm" type="button" id="tvImportHabits">Import for this day</button>
+          <span class="imp-hint">Brings in the time you actually logged for the date shown above. Use ‹ Prev / Next › for other days.</span>
+        </div>
+        <div class="entry-list" id="tvEntryList"></div>
+        <div class="empty" id="tvEntryEmpty" hidden>No time logged for this day yet. Add an activity above, or import your habit time.</div>
+        <div class="day-total">
+          <span id="tvAccountedLabel">0h 0m of 24h accounted</span>
+          <span id="tvUnaccLabel">—</span>
+        </div>
+      </section>
+
+      <!-- Trend -->
+      <section class="card">
+        <div class="card-head"><div><h2>Last 7 days</h2><p>Your day-quality trend.</p></div></div>
+        <div class="trend" id="tvTrend"></div>
+      </section>
+    </div>
+
+    <!-- Library / settings -->
+    <details class="lib" id="tvLibPanel">
+      <summary>
+        <div><h2>Activities &amp; settings</h2></div>
+        <span class="status-chip" id="tvLibCount">0 activities</span>
+      </summary>
+      <div class="lib-body">
+        <div class="settings-row">
+          <label for="tvCurrency">Currency</label>
+          <input type="text" id="tvCurrency" style="width:64px;" maxlength="3" />
+          <label for="tvHourly">Value of 1 hour</label>
+          <input type="number" id="tvHourly" style="width:120px;" min="0" step="10" />
+          <span class="brand-sub">Used for the “time is money” figures.</span>
+        </div>
+        <div class="lib-list" id="tvLibList"></div>
+        <div class="lib-add">
+          <input type="text" id="tvNewName" placeholder="New activity (e.g. Pharmacy run)" />
+          <select id="tvNewTier"></select>
+          <button class="btn primary" type="button" id="tvAddActivity">Add activity</button>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <script src="system_habits_backend.local.js?v=20260526-disable1"></script>
+  <script src="system_habits_config.local.js"></script>
+  <script src="system_habits_shared.js?v=20260803-toast2"></script>
+  <script src="system_habits_backend.google.js?v=20260526-disable1"></script>
+  <script src="system_habits_time.js?v=20260803-timevalue7"></script>
+  <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
+  <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
+</body>
+</html>

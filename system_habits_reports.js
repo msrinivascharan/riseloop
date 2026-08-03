@@ -1464,7 +1464,7 @@
           labels: trendSeries.series.map(function (bucket) { return bucket.label; }),
           datasets: [
             { label: "Planned", data: trendSeries.series.map(function (bucket) { return bucket.plannedMinutes; }), borderColor: "rgba(245, 187, 134, 0.98)", backgroundColor: "rgba(245, 187, 134, 0.18)", borderWidth: 2, tension: 0.22, pointRadius: 2, fill: false },
-            { label: "Logged", data: trendSeries.series.map(function (bucket) { return bucket.loggedMinutes; }), borderColor: "rgba(77, 143, 116, 0.98)", backgroundColor: "rgba(77, 143, 116, 0.16)", borderWidth: 2, tension: 0.22, pointRadius: 2, fill: false },
+            { label: "Logged", data: trendSeries.series.map(function (bucket) { return bucket.loggedMinutes; }), borderColor: "rgba(217, 119, 11, 0.98)", backgroundColor: "rgba(217, 119, 11, 0.16)", borderWidth: 2, tension: 0.22, pointRadius: 2, fill: false },
             { label: "Unused", data: trendSeries.series.map(function (bucket) { return bucket.unusedMinutes; }), borderColor: "rgba(242, 163, 155, 0.98)", backgroundColor: "rgba(242, 163, 155, 0.14)", borderWidth: 2, tension: 0.22, pointRadius: 2, fill: false },
             { label: "Unplanned", data: trendSeries.series.map(function (bucket) { return bucket.unplannedMinutes; }), borderColor: "rgba(111, 156, 205, 0.96)", backgroundColor: "rgba(207, 229, 245, 0.16)", borderWidth: 2, borderDash: [7, 5], tension: 0.22, pointRadius: 2, fill: false }
           ]
@@ -1474,11 +1474,11 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { grid: { display: false }, ticks: { color: "#718076" } },
+            x: { grid: { display: false }, ticks: { color: "#8a7663" } },
             y: {
               beginAtZero: true,
-              grid: { color: "rgba(91, 112, 95, 0.12)" },
-              ticks: { color: "#718076", callback: function (value) { return formatDurationLabel(value); } }
+              grid: { color: "rgba(192, 142, 98, 0.12)" },
+              ticks: { color: "#8a7663", callback: function (value) { return formatDurationLabel(value); } }
             }
           },
           plugins: {
@@ -1589,8 +1589,8 @@
                 type: "bar",
                 label: "Actual",
                 data: series.series.map(function (bucket) { return bucket.actual; }),
-                backgroundColor: "rgba(100, 159, 125, 0.62)",
-                borderColor: "rgba(63, 117, 89, 0.95)",
+                backgroundColor: "rgba(245, 153, 31, 0.62)",
+                borderColor: "rgba(217, 119, 11, 0.95)",
                 borderWidth: 1,
                 borderRadius: 8
               },
@@ -1616,7 +1616,7 @@
               x: {
                 grid: { display: false },
                 ticks: {
-                  color: "#718076",
+                  color: "#8a7663",
                   maxRotation: 45,
                   autoSkip: true,
                   maxTicksLimit: 15
@@ -1625,8 +1625,8 @@
               y: {
                 beginAtZero: true,
                 suggestedMax: maxTarget > 0 ? maxTarget : 1,
-                grid: { color: "rgba(91, 112, 95, 0.12)" },
-                ticks: { color: "#718076" }
+                grid: { color: "rgba(192, 142, 98, 0.12)" },
+                ticks: { color: "#8a7663" }
               }
             },
             plugins: {
