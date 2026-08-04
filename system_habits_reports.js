@@ -434,6 +434,109 @@
       });
   }
 
+  /* ------------------------------------------------------------------ *
+   * Goal pace (Knowledge Acquisition only)
+   * The bars already show actual vs target per period. What they don't say
+   * is whether the period still in progress is on track, and how hard to
+   * push for the days that are left. This computes that for the current
+   * bucket: full goal (daily target x active days), what's logged, what's
+   * left, and the per-day rate needed across the remaining active days.
+   * ------------------------------------------------------------------ */
+  const GOAL_PACE_CATEGORY = "knowledge acquisition";
+
+  const PERIOD_SCOPE_LABEL = {
+    daily: "Today's",
+    weekly: "This week's",
+    monthly: "This month's",
+    yearly: "This year's"
+  };
+
+  function isGoalPaceCategory(category) {
+    return String(category || "").trim().toLowerCase() === GOAL_PACE_CATEGORY;
+  }
+
+  function buildGoalPace(backend, habit, entryIndex, bucket) {
+    if (!habit || habit.type !== "measurable" || !bucket || !Array.isArray(bucket.dates)) {
+      return null;
+    }
+
+    const dailyTarget = getHabitDailyTargetValue(backend, habit);
+    if (!dailyTarget) {
+      return null;
+    }
+
+    const today = startOfDay(new Date()).getTime();
+    let target = 0;
+    let actual = 0;
+    let daysLeft = 0;   // active days still open, today included
+    let daysClosed = 0; // active days already finished
+
+    bucket.dates.forEach(function (date) {
+      if (!isHabitRelevantForReports(habit, entryIndex, date)) {
+        return;
+      }
+
+      target += dailyTarget;
+
+      const entry = getEntryForDate(entryIndex, habit.id, date);
+      const value = Number(entry && entry.value);
+      actual += Number.isFinite(value) && value > 0 ? value : 0;
+
+      if (startOfDay(date).getTime() < today) {
+        daysClosed += 1;
+      } else {
+        daysLeft += 1;
+      }
+    });
+
+    if (target <= 0) {
+      return null;
+    }
+
+    const remaining = Math.max(0, roundNumber(target - actual, 2));
+    // Fully finished days are the fair benchmark — today is still in play.
+    const expectedByNow = dailyTarget * daysClosed;
+    const perDayNeeded = daysLeft > 0 ? Math.ceil(remaining / daysLeft) : remaining;
+
+    let status;
+    if (actual >= target) {
+      status = "met";
+    } else if (daysLeft === 0) {
+      status = "missed";
+    } else if (actual >= expectedByNow) {
+      status = "ontrack";
+    } else {
+      status = "behind";
+    }
+
+    return {
+      status: status,
+      target: roundNumber(target, 2),
+      actual: roundNumber(actual, 2),
+      remaining: remaining,
+      perDayNeeded: perDayNeeded,
+      daysLeft: daysLeft,
+      percent: target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0
+    };
+  }
+
+  function buildGoalPaceMessage(pace, unitLabel) {
+    const left = `${formatCompactNumber(pace.remaining)} ${unitLabel}`;
+    const rate = `${formatCompactNumber(pace.perDayNeeded)} ${unitLabel}/day`;
+    const days = `${pace.daysLeft} active day${pace.daysLeft === 1 ? "" : "s"} left`;
+
+    if (pace.status === "met") {
+      return "Goal reached — anything more is a bonus.";
+    }
+    if (pace.status === "missed") {
+      return `Fell short by ${left}. No active days left in this period.`;
+    }
+    if (pace.status === "ontrack") {
+      return `On track — ${left} to go. About ${rate} across the ${days}.`;
+    }
+    return `Behind pace — ${left} to go. Push about ${rate} across the ${days}.`;
+  }
+
   function buildHabitSeries(backend, habit, entryIndex, buckets) {
     const series = buckets.map(function (bucket) {
       let actual = 0;
@@ -1516,6 +1619,24 @@
 
         const hasNoDataInPeriod = stats.series.every(function (b) { return b.activeDays === 0; });
 
+        // Knowledge Acquisition habits also get a live goal-pace strip for the
+        // period currently in progress (the last bucket).
+        const pace = isGoalPaceCategory(group.category)
+          ? buildGoalPace(backend, habit, analytics.entryIndex, buckets[buckets.length - 1])
+          : null;
+        const paceHtml = pace
+          ? `
+            <div class="goal-pace goal-pace--${escapeHtml(pace.status)}">
+              <div class="goal-pace-head">
+                <span class="goal-pace-title">${escapeHtml(PERIOD_SCOPE_LABEL[state.period] || "This period's")} goal</span>
+                <span class="goal-pace-figure">${escapeHtml(formatCompactNumber(pace.actual))} / ${escapeHtml(formatCompactNumber(pace.target))} ${escapeHtml(unitLabel)}</span>
+              </div>
+              <div class="goal-pace-bar"><span style="width:${pace.percent}%"></span></div>
+              <div class="goal-pace-msg">${escapeHtml(buildGoalPaceMessage(pace, unitLabel))}</div>
+            </div>
+          `
+          : "";
+
         return `
           <article class="chart-card">
             <div class="chart-card-head">
@@ -1543,6 +1664,7 @@
                 <strong>${escapeHtml(String(stats.totalEntryCount))}</strong>
               </div>
             </div>
+            ${paceHtml}
             ${hasNoDataInPeriod
               ? `<div class="chart-empty">No log entries found in this period. Switch to a longer view or check if data has been synced.</div>`
               : `<canvas id="${escapeHtml(chartId)}"></canvas>`
