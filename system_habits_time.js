@@ -48,7 +48,6 @@
 
   var state = {
     dateKey: todayKey(),
-    settings: loadSettings(),
     activities: loadActivities(),
     entries: [],
     mode: "duration"
@@ -61,14 +60,9 @@
   }
   function writeJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
 
-  function loadSettings() {
-    var s = readJSON(LS.settings, null) || {};
-    return {
-      hourlyValue: typeof s.hourlyValue === "number" ? s.hourlyValue : 500,
-      currency: s.currency || "₹"
-    };
-  }
-  function saveSettings() { writeJSON(LS.settings, state.settings); }
+  // Currency/hourly-value settings were removed — drop the now-unused key so
+  // stale data doesn't linger. Day logs and the activity library are untouched.
+  function dropLegacySettings() { try { localStorage.removeItem(LS.settings); } catch (e) {} }
 
   function loadActivities() {
     var a = readJSON(LS.activities, null);
@@ -104,10 +98,6 @@
     if (h && m) { return h + "h " + m + "m"; }
     if (h) { return h + "h"; }
     return m + "m";
-  }
-  function moneyOf(mins) { return (mins / 60) * state.settings.hourlyValue; }
-  function fmtMoney(mins) {
-    return state.settings.currency + Math.round(moneyOf(mins)).toLocaleString();
   }
 
   function parseTimeToMinutes(t) {
@@ -169,12 +159,11 @@
       var m = c.by[t];
       setText(card.querySelector("[data-tier-hours]"), fmtHM(m));
       setText(card.querySelector("[data-tier-pct]"), Math.round((m / 1440) * 100) + "%");
-      setText(card.querySelector("[data-tier-money]"), fmtMoney(m));
     });
 
-    // money summary
-    setText(doc.getElementById("tvMoneyCreated"), fmtMoney(c.weighted));
-    setText(doc.getElementById("tvMoneyDrained"), fmtMoney(c.by.drains));
+    // time summary
+    setText(doc.getElementById("tvValueAdding"), fmtHM(c.by.invests + c.by.recharges));
+    setText(doc.getElementById("tvTimeDrained"), fmtHM(c.by.drains));
     setText(doc.getElementById("tvUnaccounted"), fmtHM(c.unaccounted));
   }
 
@@ -218,7 +207,7 @@
         '<span class="e-dot" style="background:' + color + '"></span>' +
         '<span class="e-name">' + escapeHtml(e.name) + src + '</span>' +
         '<span class="e-time">' + fmtHM(e.minutes) + '</span>' +
-        '<span class="e-money">' + fmtMoney(e.minutes) + '</span>' +
+        '<span class="e-pct">' + (TIERS[e.tier] ? TIERS[e.tier].label : "") + '</span>' +
         '<button class="e-del" type="button" title="Remove" data-del="' + e.id + '">×</button>';
       list.appendChild(row);
     });
@@ -653,24 +642,6 @@
       b.addEventListener("click", function () { setMode(b.getAttribute("data-mode")); });
     });
 
-    var hourly = doc.getElementById("tvHourly");
-    if (hourly) {
-      hourly.value = state.settings.hourlyValue;
-      hourly.addEventListener("change", function () {
-        var v = parseFloat(hourly.value);
-        state.settings.hourlyValue = isNaN(v) || v < 0 ? 0 : v;
-        saveSettings(); renderAll();
-      });
-    }
-    var cur = doc.getElementById("tvCurrency");
-    if (cur) {
-      cur.value = state.settings.currency;
-      cur.addEventListener("change", function () {
-        state.settings.currency = (cur.value || "₹").trim() || "₹";
-        saveSettings(); renderAll();
-      });
-    }
-
     // event delegation for dynamic controls
     doc.addEventListener("click", function (e) {
       var del = e.target.closest && e.target.closest("[data-del]");
@@ -688,6 +659,7 @@
 
   function start() {
     purgeOncePastDays();
+    dropLegacySettings();
     state.entries = loadEntries(state.dateKey);
     var input = doc.getElementById("tvDate");
     if (input) { input.value = state.dateKey; }

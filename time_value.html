@@ -126,13 +126,13 @@
     .tier-hours { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.04em; }
     .tier-sub { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
 
-    .money-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-top: 16px; }
-    .money-card { padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid var(--line-soft); text-align: center; }
-    .money-card .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
-    .money-card .v { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; }
-    .money-card.created { background: var(--t-invests-soft); } .money-card.created .v { color: var(--t-invests-strong); }
-    .money-card.drained { background: var(--t-drains-soft); } .money-card.drained .v { color: var(--t-drains-strong); }
-    .money-card.unbudget { background: var(--paper-soft); } .money-card.unbudget .v { color: var(--muted); }
+    .sum-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-top: 16px; }
+    .sum-card { padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid var(--line-soft); text-align: center; }
+    .sum-card .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+    .sum-card .v { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; }
+    .sum-card.created { background: var(--t-invests-soft); } .sum-card.created .v { color: var(--t-invests-strong); }
+    .sum-card.drained { background: var(--t-drains-soft); } .sum-card.drained .v { color: var(--t-drains-strong); }
+    .sum-card.unbudget { background: var(--paper-soft); } .sum-card.unbudget .v { color: var(--muted); }
 
     /* Trend */
     .trend { display: flex; align-items: flex-end; gap: 8px; height: 90px; margin-top: 6px; }
@@ -163,7 +163,7 @@
     .entry .e-name { font-weight: 700; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .entry .e-name .src { font-size: 0.68rem; color: var(--muted); font-weight: 600; margin-left: 6px; }
     .entry .e-time { font-weight: 700; font-size: 0.88rem; white-space: nowrap; }
-    .entry .e-money { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+    .entry .e-pct { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
     .entry .e-del { background: transparent; border: 0; color: var(--t-drains-strong); font-size: 1.05rem; line-height: 1; padding: 2px 6px; border-radius: 6px; }
     .entry .e-del:hover { background: var(--t-drains-soft); }
     .day-total { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
@@ -187,7 +187,7 @@
     @media (max-width: 900px) {
       .grid-2 { grid-template-columns: 1fr; }
       .tier-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-      .money-row { grid-template-columns: 1fr; }
+      .sum-row { grid-template-columns: 1fr; }
       .dash-top { grid-template-columns: 1fr; justify-items: center; text-align: center; }
     }
   </style>
@@ -199,7 +199,7 @@
         <span class="brand-mark">R</span>
         <div>
           <div class="brand-name">Time Value</div>
-          <div class="brand-sub">If time is money — where is yours going?</div>
+          <div class="brand-sub">Where is your day actually going?</div>
         </div>
       </div>
       <nav class="topbar-nav">
@@ -243,29 +243,29 @@
         <div class="tier-card" data-tier="invests">
           <div class="tier-head"><span class="tier-dot" style="background:var(--t-invests)"></span>Invests</div>
           <div class="tier-hours" data-tier-hours>0h</div>
-          <div class="tier-sub"><span data-tier-pct>0%</span> · <span data-tier-money>—</span></div>
+          <div class="tier-sub"><span data-tier-pct>0%</span> of day</div>
         </div>
         <div class="tier-card" data-tier="recharges">
           <div class="tier-head"><span class="tier-dot" style="background:var(--t-recharges)"></span>Recharges</div>
           <div class="tier-hours" data-tier-hours>0h</div>
-          <div class="tier-sub"><span data-tier-pct>0%</span> · <span data-tier-money>—</span></div>
+          <div class="tier-sub"><span data-tier-pct>0%</span> of day</div>
         </div>
         <div class="tier-card" data-tier="maintains">
           <div class="tier-head"><span class="tier-dot" style="background:var(--t-maintains)"></span>Maintains</div>
           <div class="tier-hours" data-tier-hours>0h</div>
-          <div class="tier-sub"><span data-tier-pct>0%</span> · <span data-tier-money>—</span></div>
+          <div class="tier-sub"><span data-tier-pct>0%</span> of day</div>
         </div>
         <div class="tier-card" data-tier="drains">
           <div class="tier-head"><span class="tier-dot" style="background:var(--t-drains)"></span>Drains</div>
           <div class="tier-hours" data-tier-hours>0h</div>
-          <div class="tier-sub"><span data-tier-pct>0%</span> · <span data-tier-money>—</span></div>
+          <div class="tier-sub"><span data-tier-pct>0%</span> of day</div>
         </div>
       </div>
 
-      <div class="money-row">
-        <div class="money-card created"><div class="k">Value created</div><div class="v" id="tvMoneyCreated">—</div></div>
-        <div class="money-card drained"><div class="k">Time drained</div><div class="v" id="tvMoneyDrained">—</div></div>
-        <div class="money-card unbudget"><div class="k">Unaccounted</div><div class="v" id="tvUnaccounted">—</div></div>
+      <div class="sum-row">
+        <div class="sum-card created"><div class="k">Value-adding time</div><div class="v" id="tvValueAdding">—</div></div>
+        <div class="sum-card drained"><div class="k">Time drained</div><div class="v" id="tvTimeDrained">—</div></div>
+        <div class="sum-card unbudget"><div class="k">Unaccounted</div><div class="v" id="tvUnaccounted">—</div></div>
       </div>
     </section>
 
@@ -319,13 +319,6 @@
         <span class="status-chip" id="tvLibCount">0 activities</span>
       </summary>
       <div class="lib-body">
-        <div class="settings-row">
-          <label for="tvCurrency">Currency</label>
-          <input type="text" id="tvCurrency" style="width:64px;" maxlength="3" />
-          <label for="tvHourly">Value of 1 hour</label>
-          <input type="number" id="tvHourly" style="width:120px;" min="0" step="10" />
-          <span class="brand-sub">Used for the “time is money” figures.</span>
-        </div>
         <div class="lib-list" id="tvLibList"></div>
         <div class="lib-add">
           <input type="text" id="tvNewName" placeholder="New activity (e.g. Pharmacy run)" />
@@ -339,8 +332,8 @@
   <script src="system_habits_backend.local.js?v=20260526-disable1"></script>
   <script src="system_habits_config.local.js"></script>
   <script src="system_habits_shared.js?v=20260803-toast2"></script>
-  <script src="system_habits_backend.google.js?v=20260526-disable1"></script>
-  <script src="system_habits_time.js?v=20260803-timevalue7"></script>
+  <script src="system_habits_backend.google.js?v=20260804-auth1"></script>
+  <script src="system_habits_time.js?v=20260804-nocurrency1"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 </body>

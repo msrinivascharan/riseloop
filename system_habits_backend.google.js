@@ -10,6 +10,7 @@
       };
 
   const AUTH_FLAG_KEY = "system_habits_google_auth";
+  const TOKEN_KEY = "system_habits_google_token_v1";
   const LEGACY_LOCAL_STORAGE_KEY = "system-habits-studio-v1";
   const GUARDIAN_KEY = "riseloop_guardian_entry_count";
   const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -146,6 +147,7 @@
         window.gapi.client.setToken("");
       }
       window.localStorage.removeItem(AUTH_FLAG_KEY);
+      clearStoredToken();
       updateStatus({
         needsReconnect: true,
         syncing: false,
@@ -697,6 +699,93 @@
     });
   }
 
+  /* ------------------------------------------------------------------ *
+   * Access-token persistence.
+   * Google access tokens are valid ~1 hour, but they used to live only in
+   * memory — so every page load (board -> reports -> AI -> time value, or a
+   * simple refresh) triggered a fresh consent popup. We now cache the token
+   * with its expiry and restore it silently, so one sign-in covers all pages
+   * for the token's lifetime. Everything here is defensive: if anything is
+   * missing or stale we simply fall back to the normal sign-in flow.
+   * ------------------------------------------------------------------ */
+  function saveStoredToken(response) {
+    try {
+      if (!response || !response.access_token) {
+        return;
+      }
+      const expiresInSeconds = Number(response.expires_in) || 3600;
+      // Expire 2 minutes early so we never hand Google a token that dies mid-request.
+      const expiresAt = Date.now() + Math.max(0, expiresInSeconds - 120) * 1000;
+      window.localStorage.setItem(TOKEN_KEY, JSON.stringify({
+        access_token: response.access_token,
+        expiresAt: expiresAt
+      }));
+    } catch (error) {
+      /* storage unavailable — sign-in still works, just without persistence */
+    }
+  }
+
+  function readStoredToken() {
+    try {
+      const raw = window.localStorage.getItem(TOKEN_KEY);
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.access_token || !parsed.expiresAt) {
+        return null;
+      }
+      if (Date.now() >= parsed.expiresAt) {
+        return null;
+      }
+      return parsed;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function clearStoredToken() {
+    try {
+      window.localStorage.removeItem(TOKEN_KEY);
+    } catch (error) {
+      /* ignore */
+    }
+  }
+
+  // Reuse a still-valid cached token instead of prompting. Returns true when
+  // the session was restored and a sync was kicked off.
+  function restoreSessionFromStoredToken() {
+    const stored = readStoredToken();
+    if (!stored || !window.gapi || !window.gapi.client) {
+      return false;
+    }
+
+    try {
+      window.gapi.client.setToken({ access_token: stored.access_token });
+    } catch (error) {
+      return false;
+    }
+
+    state.status.signedIn = true;
+    state.status.needsReconnect = false;
+    state.status.error = "";
+
+    sync()
+      .then(function () {
+        updateStatus({ signedIn: true, needsReconnect: false, error: "" });
+      })
+      .catch(function (error) {
+        // Token was rejected (revoked early, scope change, ...) — drop it and
+        // let the usual sign-in path take over.
+        console.error(error);
+        clearStoredToken();
+        state.status.signedIn = false;
+        updateStatus({ signedIn: false });
+      });
+
+    return true;
+  }
+
   function markReadyIfPossible() {
     const ready = state.status.configured && gapiReady && gisReady;
     updateStatus({
@@ -704,6 +793,11 @@
     });
 
     if (ready && window.localStorage.getItem(AUTH_FLAG_KEY) === "true" && !state.status.signedIn) {
+      // Prefer the cached token — no popup, no flicker between pages.
+      if (restoreSessionFromStoredToken()) {
+        return;
+      }
+
       signIn().catch((error) => {
         console.error(error);
       });
@@ -773,8 +867,18 @@
     }
 
     return new Promise((resolve, reject) => {
+      // When we already have consent on record we ask Google silently first;
+      // if that needs interaction after all, retry once with a visible prompt.
+      let silentAttempt = false;
+
       tokenClient.callback = async function (response) {
         if (response && response.error) {
+          if (silentAttempt) {
+            silentAttempt = false;
+            tokenClient.requestAccessToken({ prompt: "consent" });
+            return;
+          }
+
           updateStatus({
             error: "Google sign-in failed."
           });
@@ -784,6 +888,7 @@
 
         try {
           window.localStorage.setItem(AUTH_FLAG_KEY, "true");
+          saveStoredToken(response);
           // Mark signed-in silently so sync()'s requireSignedIn() passes,
           // but do NOT emit yet — the UI stays in "connecting" state until
           // the initial load is complete, preventing any saveEntry() call
@@ -808,9 +913,14 @@
         }
       };
 
-      const prompt = window.gapi && window.gapi.client && window.gapi.client.getToken() ? "" : "consent";
+      // Previously consented (this browser) => silent; first ever run => consent.
+      const hasPriorConsent =
+        window.localStorage.getItem(AUTH_FLAG_KEY) === "true" ||
+        !!(window.gapi && window.gapi.client && window.gapi.client.getToken());
+
+      silentAttempt = hasPriorConsent;
       tokenClient.requestAccessToken({
-        prompt: prompt
+        prompt: hasPriorConsent ? "" : "consent"
       });
     });
   }
@@ -823,6 +933,7 @@
     }
 
     window.localStorage.removeItem(AUTH_FLAG_KEY);
+    clearStoredToken();
     state.habits = [];
     state.entries = [];
     state.meta.lastSyncedAt = null;
