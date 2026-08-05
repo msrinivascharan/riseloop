@@ -2482,14 +2482,30 @@
           var lapsed = rel < 0 ? true
             : rel === 0 ? (endMin !== null && nowMin >= endMin)
             : false;
-          var pending = 0;
-          var sum = p.querySelector("[data-window-habit-summary]");
-          if (sum) {
-            var mm = /(\d+)\s*pending/i.exec(sum.textContent || "");
-            if (mm) { pending = parseInt(mm[1], 10); }
+          // Whether the window still has work left. Read this from what the
+          // board actually shows, not from the summary's "K pending": the
+          // summary counts a habit done only when its DAILY target is met,
+          // while a habit card leaves the window once that WINDOW's own target
+          // is met. For habits split across windows those two disagree, which
+          // made a visibly-finished window keep blinking and refuse to hide.
+          var body = p.querySelector(".category-body");
+          var hasWork;
+          if (body) {
+            hasWork = !body.querySelector(".window-all-done") &&
+                      body.querySelectorAll(".track-card").length > 0;
+          } else {
+            // Fallback to the summary if the board markup ever changes.
+            var pending = 0;
+            var sum = p.querySelector("[data-window-habit-summary]");
+            if (sum) {
+              var mm = /(\d+)\s*pending/i.exec(sum.textContent || "");
+              if (mm) { pending = parseInt(mm[1], 10); }
+            }
+            hasWork = pending > 0;
           }
-          var attention = rel === 0 && lapsed && pending > 0; // blink: today only
-          var finished = lapsed && pending === 0;             // hideable: any day
+
+          var attention = rel === 0 && lapsed && hasWork;  // blink: today only
+          var finished = lapsed && !hasWork;               // hideable: any day
           p.classList.toggle("window-attention", attention);
           p.classList.toggle("window-finished", finished);
           if (finished) { finishedCount++; }
