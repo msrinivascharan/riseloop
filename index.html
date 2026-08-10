@@ -2080,8 +2080,150 @@
            Toggled by the inline script via .hide-finished on #checkInList. --- */
     .board-utility-bar {
       display: flex;
-      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
       margin-bottom: 12px;
+    }
+    .board-utility-spacer { flex: 1; }
+
+    /* --- Active timers: toggle + floating dock --- */
+    .timers-toggle { gap: 7px; font-size: 0.84rem; }
+    .timers-toggle::before {
+      content: "";
+      width: 8px; height: 8px; border-radius: 50%; flex: none;
+      background: var(--muted);
+    }
+    .timers-toggle.has-active::before {
+      background: var(--c-green);
+      animation: timerPulse 1.4s ease-in-out infinite;
+    }
+    .timers-toggle[aria-pressed="true"] {
+      background: var(--accent-soft);
+      border-color: rgba(217, 119, 11, 0.28);
+      color: var(--accent-strong);
+    }
+    @keyframes timerPulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(111, 168, 68, 0.5); }
+      50% { opacity: 0.75; box-shadow: 0 0 0 4px rgba(111, 168, 68, 0); }
+    }
+
+    .timers-dock {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 900;
+      width: min(340px, calc(100vw - 32px));
+      max-height: min(60vh, 520px);
+      display: flex;
+      flex-direction: column;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      box-shadow: 0 18px 46px rgba(196, 120, 44, 0.22);
+      overflow: hidden;
+    }
+    .timers-dock-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 14px;
+      background: linear-gradient(180deg, var(--accent-soft), var(--paper));
+      border-bottom: 1px solid var(--line-soft);
+      font-weight: 800;
+      font-size: 0.88rem;
+      color: var(--accent-strong);
+    }
+    .timers-dock-close {
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.15rem;
+      line-height: 1;
+      padding: 2px 7px;
+      border-radius: 7px;
+    }
+    .timers-dock-close:hover { background: var(--paper-soft); color: var(--text); }
+    .timers-dock-body {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      overflow-y: auto;
+    }
+    .timer-item {
+      padding: 11px 12px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line-soft);
+      border-left: 4px solid var(--c-green);
+      background: var(--paper-soft);
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      display: block;
+    }
+    .timer-item:hover { background: var(--accent-soft); }
+    .timer-item-name {
+      font-weight: 800;
+      font-size: 0.9rem;
+      line-height: 1.3;
+      margin-bottom: 5px;
+      word-break: break-word;
+    }
+    .timer-item-window {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: var(--paper);
+      border: 1px solid var(--line-soft);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .timer-item-readout {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .timer-item-clock {
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }
+    .timer-item-state {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--c-green-strong);
+    }
+    .timer-item-bar {
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--line-soft);
+      overflow: hidden;
+      margin-bottom: 5px;
+    }
+    .timer-item-bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--c-green), var(--c-green-strong));
+      transition: width 0.4s linear;
+    }
+    .timer-item-copy { font-size: 0.75rem; color: var(--muted); line-height: 1.4; }
+    .timers-dock-empty {
+      padding: 18px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    @media (max-width: 720px) {
+      .timers-dock { right: 12px; left: 12px; bottom: 12px; width: auto; }
     }
     .finished-toggle {
       gap: 7px;
@@ -2218,8 +2360,12 @@
           <div class="empty-state" id="emptyCheckin">
             No habits are active for this day yet. Add habits in the studio, choose their active days and windows, and they will show up here automatically.
           </div>
-          <div class="board-utility-bar" id="finishedToggleBar" hidden>
-            <button class="date-button finished-toggle" type="button" id="toggleFinishedWindows" aria-pressed="false">Hide finished windows</button>
+          <div class="board-utility-bar">
+            <button class="date-button timers-toggle" type="button" id="toggleActiveTimers" aria-pressed="false">Active timers</button>
+            <span class="board-utility-spacer"></span>
+            <span id="finishedToggleBar" hidden>
+              <button class="date-button finished-toggle" type="button" id="toggleFinishedWindows" aria-pressed="false">Hide finished windows</button>
+            </span>
           </div>
           <div class="window-stack" id="checkInList"></div>
         </section>
@@ -2555,6 +2701,181 @@
 
       refresh();
       window.setTimeout(refresh, 800);
+    })();
+  </script>
+
+  <!-- Feature: floating "Active timers" view. Shows only habits whose focus
+       timer is currently running, with the window they belong to and their
+       live progress. UI-only — it mirrors what the board already renders and
+       deliberately avoids re-using the data-* hooks app.js drives, so the real
+       cards stay the single source of truth. -->
+  <script>
+    (function () {
+      var checkIn = document.getElementById("checkInList");
+      var toggle = document.getElementById("toggleActiveTimers");
+      if (!checkIn || !toggle) { return; }
+
+      var OPEN_KEY = "riseloop_timers_dock";
+      var isOpen = false;
+      try { isOpen = localStorage.getItem(OPEN_KEY) === "1"; } catch (e) {}
+
+      var dock = document.createElement("div");
+      dock.className = "timers-dock";
+      dock.hidden = true;
+      dock.innerHTML =
+        '<div class="timers-dock-head"><span>Active timers</span>' +
+        '<button type="button" class="timers-dock-close" aria-label="Close">×</button></div>' +
+        '<div class="timers-dock-body"></div>';
+      document.body.appendChild(dock);
+
+      var dockBody = dock.querySelector(".timers-dock-body");
+      var sourceCards = [];   // keeps dock rows pointing at their real card
+      var lastSignature = "";
+
+      function text(node, fallback) {
+        return node && node.textContent ? node.textContent.trim() : (fallback || "");
+      }
+
+      // Every habit whose focus timer is currently running. A habit repeated
+      // across windows shares one timer, so it is listed once with all of the
+      // windows it belongs to rather than once per appearance.
+      function collectRunning() {
+        var found = [];
+        var byTimer = {};
+        var cards = checkIn.querySelectorAll(".track-card");
+
+        for (var i = 0; i < cards.length; i++) {
+          var card = cards[i];
+          var state = card.querySelector(".timer-state");
+          if (!state || !state.classList.contains("running")) { continue; }
+
+          var panel = card.closest(".category-panel");
+          var windowLabel = panel ? text(panel.querySelector(".category-chip")) : "";
+          var clockNode = card.querySelector(".timer-clock");
+          var timerKey = clockNode ? clockNode.getAttribute("data-timer-key") : null;
+
+          if (timerKey && byTimer[timerKey]) {
+            // Same timer seen in another window — just note the extra window.
+            var seen = byTimer[timerKey];
+            if (windowLabel && seen.windows.indexOf(windowLabel) === -1) {
+              seen.windows.push(windowLabel);
+              seen.window = seen.windows.join("  ·  ");
+            }
+            continue;
+          }
+
+          var fill = card.querySelector("[data-timer-progress-fill]");
+          var item = {
+            card: card,
+            windows: windowLabel ? [windowLabel] : [],
+            name: text(card.querySelector(".track-card-title"), "Habit"),
+            window: windowLabel,
+            clock: text(clockNode),
+            state: text(state, "Running"),
+            width: fill && fill.style.width ? fill.style.width : "0%",
+            copy: text(card.querySelector("[data-timer-progress-copy]"))
+          };
+          if (timerKey) { byTimer[timerKey] = item; }
+          found.push(item);
+        }
+        return found;
+      }
+
+      function buildRows(items) {
+        sourceCards = items.map(function (it) { return it.card; });
+        if (!items.length) {
+          dockBody.innerHTML =
+            '<div class="timers-dock-empty">No timer is running right now.<br>Start a focus timer on a habit and it will appear here.</div>';
+          return;
+        }
+        dockBody.innerHTML = items.map(function (it, idx) {
+          return '' +
+            '<button class="timer-item" type="button" data-timer-index="' + idx + '">' +
+              '<div class="timer-item-name"></div>' +
+              (it.window ? '<span class="timer-item-window"></span>' : "") +
+              '<div class="timer-item-readout">' +
+                '<span class="timer-item-clock"></span>' +
+                '<span class="timer-item-state"></span>' +
+              '</div>' +
+              '<div class="timer-item-bar"><span></span></div>' +
+              '<div class="timer-item-copy"></div>' +
+            '</button>';
+        }).join("");
+        paintRows(items);
+      }
+
+      // Text/width only — keeps the clock ticking without rebuilding the DOM.
+      function paintRows(items) {
+        var rows = dockBody.querySelectorAll(".timer-item");
+        for (var i = 0; i < rows.length && i < items.length; i++) {
+          var row = rows[i];
+          var it = items[i];
+          setText(row.querySelector(".timer-item-name"), it.name);
+          setText(row.querySelector(".timer-item-window"), it.window);
+          setText(row.querySelector(".timer-item-clock"), it.clock);
+          setText(row.querySelector(".timer-item-state"), it.state);
+          setText(row.querySelector(".timer-item-copy"), it.copy);
+          var bar = row.querySelector(".timer-item-bar span");
+          if (bar && bar.style.width !== it.width) { bar.style.width = it.width; }
+        }
+      }
+
+      function setText(node, value) {
+        if (node && node.textContent !== value) { node.textContent = value; }
+      }
+
+      function refreshTimers() {
+        var items = collectRunning();
+
+        toggle.textContent = "Active timers" + (items.length ? " (" + items.length + ")" : "");
+        toggle.classList.toggle("has-active", items.length > 0);
+
+        if (!isOpen) { return; }
+
+        // Rebuild only when the running set changes; otherwise just repaint.
+        var signature = items.map(function (it) { return it.name + "@" + it.window; }).join("|");
+        if (signature !== lastSignature) {
+          lastSignature = signature;
+          buildRows(items);
+        } else {
+          paintRows(items);
+        }
+      }
+
+      function setOpen(next) {
+        isOpen = !!next;
+        dock.hidden = !isOpen;
+        toggle.setAttribute("aria-pressed", isOpen ? "true" : "false");
+        try { localStorage.setItem(OPEN_KEY, isOpen ? "1" : "0"); } catch (e) {}
+        if (isOpen) { lastSignature = ""; }
+        refreshTimers();
+      }
+
+      toggle.addEventListener("click", function () { setOpen(!isOpen); });
+      dock.querySelector(".timers-dock-close").addEventListener("click", function () { setOpen(false); });
+
+      // Jump to the real card so the timer can actually be paused there.
+      dockBody.addEventListener("click", function (event) {
+        var row = event.target.closest ? event.target.closest("[data-timer-index]") : null;
+        if (!row) { return; }
+        var card = sourceCards[parseInt(row.getAttribute("data-timer-index"), 10)];
+        if (!card) { return; }
+        var panel = card.closest(".category-panel");
+        if (panel && !panel.open) { panel.open = true; }
+        if (card.scrollIntoView) { card.scrollIntoView({ behavior: "smooth", block: "center" }); }
+      });
+
+      if ("MutationObserver" in window) {
+        var queued = null;
+        new MutationObserver(function () {
+          if (queued) { return; }
+          queued = window.setTimeout(function () { queued = null; refreshTimers(); }, 120);
+        }).observe(checkIn, { childList: true, subtree: true, characterData: true });
+      }
+
+      window.setInterval(refreshTimers, 1000);
+
+      setOpen(isOpen);
     })();
   </script>
 </body>

@@ -354,10 +354,14 @@
     if (habit.type === "checkbox") {
       return entry.status === "done";
     }
-    const appearanceWindowKey = getAppearanceWindowKey(habit);
-    const windowValue = getStoredWindowValueForHabit(habit, dateKey, appearanceWindowKey);
-    const windowTarget = typeof habit.appearanceTarget === "number" ? habit.appearanceTarget : 0;
-    return windowTarget > 0 && windowValue >= windowTarget;
+
+    // A habit spread over several windows shares one daily target, so what
+    // counts is the combined total for the day rather than a quota inside each
+    // window. Logging all 50 minutes in the morning, or 20 there and 30 later,
+    // both finish the habit; until the day's total is reached it stays on the
+    // board in every one of its windows so the rest can be logged anywhere.
+    const progress = getReadBackend().getHabitProgress(habit, entry);
+    return !!(progress && progress.complete);
   }
 
   function getHabitWindowSequence(habitLike) {
