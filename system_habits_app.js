@@ -809,7 +809,6 @@
     const storedValue = getStoredMeasureValue(habit.id, dateKey, session.loggedValueSnapshot);
     const sessionSeconds = getCurrentSessionSeconds(session, nowMs);
     const liveValue = roundNumber(storedValue + convertSecondsToHabitValue(sessionSeconds, habit.unit), 4);
-    const liveSeconds = convertHabitValueToSeconds(storedValue, habit.unit) + sessionSeconds;
     const numericTarget = getHabitDailyTargetValue(habit);
     const safeTarget = Number.isFinite(numericTarget) && numericTarget > 0 ? numericTarget : 0;
     const progressRatio = safeTarget > 0 ? Math.max(0, Math.min(1, liveValue / safeTarget)) : 0;
@@ -819,7 +818,7 @@
         actionLabel: "Running",
         canPause: true,
         canReset: true,
-        clockText: formatTimerClock(liveSeconds),
+        clockText: formatTimerClock(sessionSeconds),
         progressText: buildTimerProgressCopy(habit, liveValue, safeTarget),
         progressWidth: `${Math.round(progressRatio * 100)}%`,
         stateClass: "running",
@@ -832,7 +831,7 @@
         actionLabel: "Continue",
         canPause: true,
         canReset: true,
-        clockText: formatTimerClock(liveSeconds),
+        clockText: formatTimerClock(sessionSeconds),
         progressText: buildTimerProgressCopy(habit, liveValue, safeTarget),
         progressWidth: `${Math.round(progressRatio * 100)}%`,
         stateClass: "paused",
@@ -844,7 +843,7 @@
       actionLabel: storedValue > 0 ? "Continue" : "Start",
       canPause: false,
       canReset: false,
-      clockText: formatTimerClock(liveSeconds),
+      clockText: formatTimerClock(sessionSeconds),
       progressText: buildTimerProgressCopy(habit, liveValue, safeTarget),
       progressWidth: `${Math.round(progressRatio * 100)}%`,
       stateClass: storedValue > 0 ? "saved" : "",
@@ -1087,6 +1086,11 @@
     session.running = false;
     session.startedAtMs = 0;
     session.bufferSeconds = 0;
+    // Re-align the snapshot with what is actually saved. It is only a guard
+    // against losing an in-flight session, but getStoredMeasureValue treats it
+    // as a floor, so a stale one keeps showing time that is no longer logged.
+    const entry = getReadBackend().getEntryForDate(habitId, state.selectedDateKey);
+    session.loggedValueSnapshot = roundNumber(Math.max(0, Number(entry && entry.value) || 0), 4);
     persistTimerState();
     syncTimerTicker();
     render();
