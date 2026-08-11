@@ -355,13 +355,25 @@
       return entry.status === "done";
     }
 
-    // A habit spread over several windows shares one daily target, so what
-    // counts is the combined total for the day rather than a quota inside each
-    // window. Logging all 50 minutes in the morning, or 20 there and 30 later,
-    // both finish the habit; until the day's total is reached it stays on the
-    // board in every one of its windows so the rest can be logged anywhere.
+    // Two ways a measurable habit is finished for a window, and either is
+    // enough.
+    //
+    // The day's combined total clears it everywhere: a habit spread over
+    // several windows shares one daily target, so 50 minutes logged in the
+    // morning — or 20 there and 30 later — finishes it in every window without
+    // needing a set amount in each.
     const progress = getReadBackend().getHabitProgress(habit, entry);
-    return !!(progress && progress.complete);
+    if (progress && progress.complete) {
+      return true;
+    }
+
+    // Otherwise this window is done once its own share has been logged here,
+    // even while the rest of the day is outstanding: reading affirmations once
+    // in the morning clears the morning window and leaves the evening one.
+    const appearanceWindowKey = getAppearanceWindowKey(habit);
+    const windowValue = getStoredWindowValueForHabit(habit, dateKey, appearanceWindowKey);
+    const windowTarget = typeof habit.appearanceTarget === "number" ? habit.appearanceTarget : 0;
+    return windowTarget > 0 && windowValue >= windowTarget;
   }
 
   function getHabitWindowSequence(habitLike) {
