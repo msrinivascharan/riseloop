@@ -2664,8 +2664,11 @@
             hasWork = pending > 0;
           }
 
-          var attention = rel === 0 && lapsed && hasWork;  // blink: today only
-          var finished = lapsed && !hasWork;               // hideable: any day
+          // Blinking is a nudge about time running out, so it needs the window
+          // to have lapsed. Hiding only asks whether anything is still owed,
+          // so a window finished early counts even while it is still open.
+          var attention = rel === 0 && lapsed && hasWork;
+          var finished = !hasWork;
           p.classList.toggle("window-attention", attention);
           p.classList.toggle("window-finished", finished);
           if (finished) { finishedCount++; }
