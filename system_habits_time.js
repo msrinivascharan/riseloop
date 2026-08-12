@@ -1,8 +1,9 @@
 /* ================================================================
  * Riseloop · Time Value
- * A "time is money" daily tracker. Treats each day as 1,440 minutes,
- * logs where the time goes across four value tiers, pulls habit time
- * from the existing backend, and shows an end-of-day 24-hour verdict.
+ * A daily time tracker. Treats each day as 1,440 minutes and groups it by
+ * the same habit categories the board and reports use, plus a Drain bucket
+ * for ad-hoc time that belongs to no habit category. Pulls habit time from
+ * the existing backend and shows an end-of-day 24-hour verdict.
  * Self-contained: its own data lives in localStorage; it reuses the
  * habit backend read-only. No changes to the board or app.js.
  * ================================================================ */
@@ -13,31 +14,55 @@
   var googleBackend = window.SystemHabitsBackend || null;
   var localBackend = window.SystemHabitsBackendLocal || null;
 
-  var TIERS = {
-    invests:   { label: "Invests",   weight: 1.00 },
-    recharges: { label: "Recharges", weight: 0.90 },
-    maintains: { label: "Maintains", weight: 0.55 },
-    drains:    { label: "Drains",    weight: 0.00 }
-  };
-  var TIER_ORDER = ["invests", "recharges", "maintains", "drains"];
+  // Time is grouped by the habit categories the system already uses, so the
+  // day reads in the same language as the board and the reports. DRAIN is the
+  // one bucket that isn't a habit category: ad-hoc time that belongs to none.
+  var DRAIN = "Drain";
+  var UNASSIGNED = "Other";
   var DAY_ABBR = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
+  // Stable colour per category, picked by name so it doesn't shuffle when
+  // categories come and go. Drain is always the warning colour.
+  var CAT_PALETTE = [
+    { base: "#6fa844", strong: "#4c8438" },
+    { base: "#4a90d2", strong: "#2f72bb" },
+    { base: "#6366c9", strong: "#474bad" },
+    { base: "#f4b330", strong: "#955a05" },
+    { base: "#3aa79a", strong: "#2b7f75" },
+    { base: "#a266c9", strong: "#7d46a3" },
+    { base: "#e2749a", strong: "#bf4f78" },
+    { base: "#f5991f", strong: "#b45309" }
+  ];
+  var DRAIN_COLOR = { base: "#ef6b53", strong: "#d24d37" };
+  var UNACCOUNTED_COLOR = { base: "#c9b7a6", strong: "#8a7663" };
+
+  // Colours are handed out in category order rather than hashed, so two
+  // categories can never land on the same swatch while there are colours left.
+  var catColors = {};
+
+  function refreshCategoryColors() {
+    var next = {};
+    allCategories().forEach(function (name) {
+      if (name === DRAIN) { return; }
+      next[name] = CAT_PALETTE[Object.keys(next).length % CAT_PALETTE.length];
+    });
+    catColors = next;
+  }
+
+  function categoryColor(name) {
+    if (name === DRAIN) { return DRAIN_COLOR; }
+    if (name === "__unaccounted") { return UNACCOUNTED_COLOR; }
+    if (!catColors[name]) {
+      catColors[name] = CAT_PALETTE[Object.keys(catColors).length % CAT_PALETTE.length];
+    }
+    return catColors[name];
+  }
+
   var DEFAULT_ACTIVITIES = [
-    { name: "Sleep", tier: "recharges" },
-    { name: "Gym / workout", tier: "invests" },
-    { name: "Office work", tier: "invests" },
-    { name: "Family / dining", tier: "invests" },
-    { name: "Deep work / learning", tier: "invests" },
-    { name: "Breathing / meditation", tier: "recharges" },
-    { name: "Indoor walk", tier: "recharges" },
-    { name: "Socializing with friends", tier: "invests" },
-    { name: "Kitchen / cooking", tier: "maintains" },
-    { name: "Home chores", tier: "maintains" },
-    { name: "Commute", tier: "maintains" },
-    { name: "Pharmacy run", tier: "maintains" },
-    { name: "Unplanned errand", tier: "maintains" },
-    { name: "TV / entertainment", tier: "maintains" },
-    { name: "Doomscrolling / idle", tier: "drains" }
+    { name: "Pharmacy run", category: DRAIN },
+    { name: "Unplanned errand", category: DRAIN },
+    { name: "TV / entertainment", category: DRAIN },
+    { name: "Doomscrolling / idle", category: DRAIN }
   ];
 
   var LS = {
@@ -65,14 +90,43 @@
   function dropLegacySettings() { try { localStorage.removeItem(LS.settings); } catch (e) {} }
 
   function loadActivities() {
-    var a = readJSON(LS.activities, null);
-    if (!a || !a.length) {
-      a = DEFAULT_ACTIVITIES.map(function (x, i) {
-        return { id: "a" + i, name: x.name, tier: x.tier };
+    var stored = readJSON(LS.activities, null);
+    if (!stored || !stored.length) {
+      var seeded = DEFAULT_ACTIVITIES.map(function (x, i) {
+        return { id: "a" + i, name: x.name, category: x.category };
       });
-      writeJSON(LS.activities, a);
+      writeJSON(LS.activities, seeded);
+      return seeded;
     }
-    return a;
+    // Carry the old value-tier library over: what used to drain is ad-hoc
+    // time, everything else waits to be filed under a real habit category.
+    var changed = false;
+    var list = stored.map(function (a) {
+      if (a && a.category) { return a; }
+      changed = true;
+      return { id: a.id, name: a.name, category: a.tier === "drains" ? DRAIN : UNASSIGNED };
+    });
+    if (changed) { writeJSON(LS.activities, list); }
+    return list;
+  }
+
+  // Habit categories in use, with Drain always offered last.
+  function allCategories() {
+    var set = {};
+    var snap = getSnapshot();
+    if (snap && snap.habits) {
+      snap.habits.forEach(function (h) {
+        if (h.enabled === false) { return; }
+        set[habitCategory(h)] = true;
+      });
+    }
+    // Keep anything already in use so nothing silently loses its bucket.
+    state.activities.forEach(function (a) { if (a.category) { set[a.category] = true; } });
+    state.entries.forEach(function (e) { if (e.category) { set[e.category] = true; } });
+    delete set[DRAIN];
+    var list = Object.keys(set).sort();
+    list.push(DRAIN);
+    return list;
   }
   function saveActivities() { writeJSON(LS.activities, state.activities); }
 
@@ -118,19 +172,27 @@
   function computeDay(entries) {
     var by = { invests: 0, recharges: 0, maintains: 0, drains: 0 };
     entries.forEach(function (e) {
-      var t = by[e.tier] === undefined ? "maintains" : e.tier;
-      by[t] += Math.max(0, e.minutes || 0);
+      var cat = (e.category && String(e.category)) || UNASSIGNED;
+      by[cat] = (by[cat] || 0) + Math.max(0, e.minutes || 0);
     });
-    var accounted = by.invests + by.recharges + by.maintains + by.drains;
+
+    var accounted = 0;
+    Object.keys(by).forEach(function (k) { accounted += by[k]; });
+    var drain = by[DRAIN] || 0;
+    var onCategories = accounted - drain;
     var unaccounted = Math.max(0, 1440 - accounted);
-    var weighted = 0;
-    TIER_ORDER.forEach(function (t) { weighted += by[t] * TIERS[t].weight; });
-    var score = accounted > 0 ? Math.round((100 * weighted) / accounted) : 0;
-    return { by: by, accounted: accounted, unaccounted: unaccounted, weighted: weighted, score: score };
+    // How much of the time you accounted for went to a real habit category.
+    var score = accounted > 0 ? Math.round((100 * onCategories) / accounted) : 0;
+
+    return {
+      by: by, accounted: accounted, drain: drain,
+      onCategories: onCategories, unaccounted: unaccounted, score: score
+    };
   }
 
   /* ---------- render ---------- */
   function renderAll() {
+    refreshCategoryColors();
     renderDashboard();
     renderEntries();
     renderTrend();
@@ -149,28 +211,45 @@
     var legend = doc.getElementById("tv24hLegend");
     if (bar) { bar.innerHTML = ""; }
     if (legend) { legend.innerHTML = ""; }
-    TIER_ORDER.forEach(function (t) { addSeg(bar, legend, t, TIERS[t].label, c.by[t]); });
-    addSeg(bar, legend, "unaccounted", "Unaccounted", c.unaccounted);
 
-    // tier cards
-    TIER_ORDER.forEach(function (t) {
-      var card = doc.querySelector('.tier-card[data-tier="' + t + '"]');
-      if (!card) { return; }
-      var m = c.by[t];
-      setText(card.querySelector("[data-tier-hours]"), fmtHM(m));
-      setText(card.querySelector("[data-tier-pct]"), Math.round((m / 1440) * 100) + "%");
+    // Biggest category first, with ad-hoc Drain kept at the end.
+    var names = Object.keys(c.by).filter(function (k) { return c.by[k] > 0; });
+    names.sort(function (a, b) {
+      if (a === DRAIN) { return 1; }
+      if (b === DRAIN) { return -1; }
+      return c.by[b] - c.by[a];
     });
 
+    names.forEach(function (n) { addSeg(bar, legend, n, n, c.by[n]); });
+    addSeg(bar, legend, "__unaccounted", "Unaccounted", c.unaccounted);
+
+    // One card per category actually used today.
+    var grid = doc.getElementById("tvCategoryGrid");
+    if (grid) {
+      grid.innerHTML = names.map(function (n) {
+        var col = categoryColor(n);
+        var mins = c.by[n];
+        return '<div class="tier-card" style="--cat:' + col.base + '">' +
+          '<div class="tier-head"><span class="tier-dot" style="background:' + col.base + '"></span>' +
+          escapeHtml(n) + '</div>' +
+          '<div class="tier-hours">' + escapeHtml(fmtHM(mins)) + '</div>' +
+          '<div class="tier-sub">' + Math.round((mins / 1440) * 100) + '% of day</div>' +
+          '</div>';
+      }).join("");
+    }
+    var emptyNote = doc.getElementById("tvCategoryEmpty");
+    if (emptyNote) { emptyNote.hidden = names.length > 0; }
+
     // time summary
-    setText(doc.getElementById("tvValueAdding"), fmtHM(c.by.invests + c.by.recharges));
-    setText(doc.getElementById("tvTimeDrained"), fmtHM(c.by.drains));
+    setText(doc.getElementById("tvValueAdding"), fmtHM(c.onCategories));
+    setText(doc.getElementById("tvTimeDrained"), fmtHM(c.drain));
     setText(doc.getElementById("tvUnaccounted"), fmtHM(c.unaccounted));
   }
 
   function addSeg(bar, legend, key, label, mins) {
     if (mins <= 0) { return; }
     var pct = (mins / 1440) * 100;
-    var color = "var(--t-" + key + ")";
+    var color = categoryColor(key).base;
     if (bar) {
       var s = doc.createElement("span");
       s.style.width = pct + "%";
@@ -201,13 +280,14 @@
     state.entries.forEach(function (e) {
       var row = doc.createElement("div");
       row.className = "entry";
-      var color = "var(--t-" + (TIERS[e.tier] ? e.tier : "maintains") + ")";
+      var cat = e.category || UNASSIGNED;
+      var color = categoryColor(cat).base;
       var src = e.source === "habit" ? '<span class="src">from habit</span>' : "";
       row.innerHTML =
         '<span class="e-dot" style="background:' + color + '"></span>' +
         '<span class="e-name">' + escapeHtml(e.name) + src + '</span>' +
         '<span class="e-time">' + fmtHM(e.minutes) + '</span>' +
-        '<span class="e-pct">' + (TIERS[e.tier] ? TIERS[e.tier].label : "") + '</span>' +
+        '<span class="e-pct">' + escapeHtml(cat) + '</span>' +
         '<button class="e-del" type="button" title="Remove" data-del="' + e.id + '">×</button>';
       list.appendChild(row);
     });
@@ -246,19 +326,21 @@
     state.activities.forEach(function (a) {
       var o = doc.createElement("option");
       o.value = a.id;
-      o.textContent = a.name + "  ·  " + TIERS[a.tier].label;
+      o.textContent = a.name + "  ·  " + (a.category || UNASSIGNED);
       sel.appendChild(o);
     });
   }
 
-  function renderTierOptions(sel, selected) {
+  function renderCategoryOptions(sel, selected) {
     if (!sel) { return; }
+    var options = allCategories();
+    if (selected && options.indexOf(selected) === -1) { options.unshift(selected); }
     sel.innerHTML = "";
-    TIER_ORDER.forEach(function (t) {
+    options.forEach(function (name) {
       var o = doc.createElement("option");
-      o.value = t;
-      o.textContent = TIERS[t].label;
-      if (t === selected) { o.selected = true; }
+      o.value = name;
+      o.textContent = name;
+      if (name === selected) { o.selected = true; }
       sel.appendChild(o);
     });
   }
@@ -270,18 +352,18 @@
       state.activities.forEach(function (a) {
         var row = doc.createElement("div");
         row.className = "lib-item";
-        var color = "var(--t-" + a.tier + ")";
+        var color = categoryColor(a.category || UNASSIGNED).base;
         row.innerHTML =
           '<span class="l-name"><span class="tier-pill"><span class="tier-dot" style="background:' + color + '"></span>' +
           escapeHtml(a.name) + '</span></span>' +
-          '<select data-tier-for="' + a.id + '"></select>' +
+          '<select data-cat-for="' + a.id + '"></select>' +
           '<button class="btn sm" type="button" data-del-act="' + a.id + '">Delete</button>';
         list.appendChild(row);
-        renderTierOptions(row.querySelector("[data-tier-for]"), a.tier);
+        renderCategoryOptions(row.querySelector("[data-cat-for]"), a.category || UNASSIGNED);
       });
     }
     setText(doc.getElementById("tvLibCount"), state.activities.length + " activities");
-    renderTierOptions(doc.getElementById("tvNewTier"), "invests");
+    renderCategoryOptions(doc.getElementById("tvNewCategory"), allCategories()[0]);
     renderActivitySelect();
   }
 
@@ -337,7 +419,10 @@
       else { alert("End time must be after the start."); }
       return;
     }
-    state.entries.push({ id: genId(), name: act.name, tier: act.tier, minutes: r.minutes, source: "manual" });
+    state.entries.push({
+      id: genId(), name: act.name, category: act.category || UNASSIGNED,
+      minutes: r.minutes, source: "manual"
+    });
     saveEntries();
     clearAddInputs();
     renderAll();
@@ -351,20 +436,20 @@
 
   function addActivity() {
     var nameEl = doc.getElementById("tvNewName");
-    var tierEl = doc.getElementById("tvNewTier");
+    var catEl = doc.getElementById("tvNewCategory");
     if (!nameEl) { return; }
     var name = (nameEl.value || "").trim();
     if (!name) { alert("Enter an activity name."); return; }
-    var tier = tierEl && TIERS[tierEl.value] ? tierEl.value : "invests";
-    state.activities.push({ id: "a" + Date.now(), name: name, tier: tier });
+    var category = (catEl && catEl.value) || allCategories()[0] || DRAIN;
+    state.activities.push({ id: "a" + Date.now(), name: name, category: category });
     saveActivities();
     nameEl.value = "";
     renderLibrary();
   }
 
-  function setActivityTier(id, tier) {
-    if (!TIERS[tier]) { return; }
-    state.activities.forEach(function (a) { if (a.id === id) { a.tier = tier; } });
+  function setActivityCategory(id, category) {
+    if (!category) { return; }
+    state.activities.forEach(function (a) { if (a.id === id) { a.category = category; } });
     saveActivities();
     renderLibrary();
   }
@@ -512,7 +597,7 @@
       if (mins <= 0) { return; } // nothing logged for this habit that day
       fresh.push({
         id: genId(), name: (h.name || category),
-        tier: "invests", minutes: mins, source: "habit", category: category
+        minutes: mins, source: "habit", category: category
       });
     });
 
@@ -650,8 +735,8 @@
       if (delAct) { deleteActivity(delAct.getAttribute("data-del-act")); return; }
     });
     doc.addEventListener("change", function (e) {
-      var tsel = e.target.closest && e.target.closest("[data-tier-for]");
-      if (tsel) { setActivityTier(tsel.getAttribute("data-tier-for"), tsel.value); }
+      var tsel = e.target.closest && e.target.closest("[data-cat-for]");
+      if (tsel) { setActivityCategory(tsel.getAttribute("data-cat-for"), tsel.value); }
     });
   }
 
