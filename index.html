@@ -2112,7 +2112,7 @@
       right: 20px;
       bottom: 20px;
       z-index: 900;
-      width: min(340px, calc(100vw - 32px));
+      width: min(178px, calc(100vw - 24px));
       max-height: min(60vh, 520px);
       display: flex;
       flex-direction: column;
@@ -2126,34 +2126,39 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      padding: 11px 14px;
+      gap: 6px;
+      padding: 6px 8px;
       background: linear-gradient(180deg, var(--accent-soft), var(--paper));
       border-bottom: 1px solid var(--line-soft);
       font-weight: 800;
-      font-size: 0.88rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.01em;
       color: var(--accent-strong);
     }
     .timers-dock-close {
       background: transparent;
       color: var(--muted);
-      font-size: 1.15rem;
+      font-size: 0.95rem;
       line-height: 1;
-      padding: 2px 7px;
-      border-radius: 7px;
+      padding: 0 4px;
+      border-radius: 5px;
     }
     .timers-dock-close:hover { background: var(--paper-soft); color: var(--text); }
     .timers-dock-body {
-      padding: 12px;
+      padding: 6px;
       display: grid;
-      gap: 10px;
+      /* Cap the track so a long habit name ellipsises instead of forcing the
+         row wider than the dock, which would clip it without any marker. */
+      grid-template-columns: minmax(0, 1fr);
+      gap: 5px;
       overflow-y: auto;
     }
     .timer-item {
-      padding: 11px 12px;
-      border-radius: var(--radius-lg);
+      min-width: 0;
+      padding: 6px 7px;
+      border-radius: 9px;
       border: 1px solid var(--line-soft);
-      border-left: 4px solid var(--c-green);
+      border-left: 3px solid var(--c-green);
       background: var(--paper-soft);
       cursor: pointer;
       text-align: left;
@@ -2163,49 +2168,51 @@
     .timer-item:hover { background: var(--accent-soft); }
     .timer-item-name {
       font-weight: 800;
-      font-size: 0.9rem;
-      line-height: 1.3;
-      margin-bottom: 5px;
-      word-break: break-word;
+      font-size: 0.72rem;
+      line-height: 1.25;
+      margin-bottom: 1px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .timer-item-window {
-      display: inline-block;
-      padding: 3px 9px;
-      border-radius: 999px;
-      background: var(--paper);
-      border: 1px solid var(--line-soft);
-      font-size: 0.72rem;
+      display: block;
+      font-size: 0.6rem;
       font-weight: 700;
       color: var(--muted);
-      margin-bottom: 8px;
+      line-height: 1.25;
+      margin-bottom: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .timer-item-readout {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 6px;
+      gap: 5px;
+      margin-bottom: 3px;
     }
     .timer-item-clock {
-      font-size: 1.2rem;
+      font-size: 0.92rem;
       font-weight: 800;
-      letter-spacing: -0.03em;
+      letter-spacing: -0.02em;
       font-variant-numeric: tabular-nums;
     }
     .timer-item-state {
-      font-size: 0.72rem;
+      font-size: 0.55rem;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       color: var(--c-green-strong);
     }
     .timer-item-bar {
-      height: 7px;
+      height: 4px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.9);
       border: 1px solid var(--line-soft);
       overflow: hidden;
-      margin-bottom: 5px;
+      margin-bottom: 3px;
     }
     .timer-item-bar span {
       display: block;
@@ -2214,16 +2221,23 @@
       background: linear-gradient(90deg, var(--c-green), var(--c-green-strong));
       transition: width 0.4s linear;
     }
-    .timer-item-copy { font-size: 0.75rem; color: var(--muted); line-height: 1.4; }
+    .timer-item-copy {
+      font-size: 0.6rem;
+      color: var(--muted);
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .timers-dock-empty {
-      padding: 18px 12px;
+      padding: 10px 8px;
       text-align: center;
       color: var(--muted);
-      font-size: 0.85rem;
-      line-height: 1.5;
+      font-size: 0.66rem;
+      line-height: 1.4;
     }
     @media (max-width: 720px) {
-      .timers-dock { right: 12px; left: 12px; bottom: 12px; width: auto; }
+      .timers-dock { right: 10px; left: auto; bottom: 10px; width: min(178px, calc(100vw - 20px)); }
     }
     .finished-toggle {
       gap: 7px;
