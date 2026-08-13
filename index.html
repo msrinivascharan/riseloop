@@ -2259,6 +2259,328 @@
     #checkInList.hide-finished > .category-panel.window-finished {
       display: none;
     }
+
+    /* ---- Day pace panel ---- */
+    .pace-panel {
+      --pace: var(--c-green);
+      --pace-soft: var(--c-green-soft);
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--pace);
+      border-radius: 10px;
+      background: linear-gradient(180deg, var(--pace-soft), var(--paper) 70%);
+    }
+    .pace-panel.is-tight  { --pace: var(--c-amber); --pace-soft: var(--c-amber-soft); }
+    .pace-panel.is-behind { --pace: var(--c-coral); --pace-soft: var(--c-coral-soft); }
+    .pace-panel.is-done   { --pace: var(--c-blue);  --pace-soft: var(--c-blue-soft); }
+
+    .pace-head {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      margin-bottom: 7px;
+    }
+    .pace-title {
+      font-size: 0.68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .pace-window { font-size: 0.7rem; color: var(--muted); font-weight: 600; }
+    .pace-verdict {
+      margin-left: auto;
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: var(--pace);
+    }
+
+    /* Planned habit time laid against the day, with a marker for now. */
+    .pace-bar {
+      position: relative;
+      display: flex;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--paper-soft);
+      border: 1px solid var(--line-soft);
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .pace-bar > span { height: 100%; transition: width 0.3s ease; }
+    .pace-done { background: linear-gradient(90deg, var(--c-green), var(--c-green-strong)); }
+    .pace-left { background: var(--pace); opacity: 0.42; }
+    .pace-now {
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      width: 2px;
+      background: var(--text);
+      opacity: 0.75;
+      border-radius: 2px;
+      transition: left 0.3s ease;
+    }
+
+    .pace-stats { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+    .pace-stat {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--paper);
+      border: 1px solid var(--line-soft);
+    }
+    .pace-k {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .pace-stat strong { font-size: 0.75rem; }
+    .pace-note { margin-top: 6px; font-size: 0.68rem; color: var(--muted); line-height: 1.4; }
+
+    /* ================================================================
+       Dense board — windows and habits as lean left-aligned bars.
+       Everything the roomier card layout showed is still here, packed
+       onto fewer lines so a whole day reads without scrolling.
+       ================================================================ */
+
+    /* One column: each window is a full-width strip, not a tile. */
+    .window-stack {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    /* ---- Window strip ---- */
+    #checkInList > .category-panel {
+      border-radius: 10px;
+      border-left-width: 4px;
+      background: var(--paper);
+    }
+    #checkInList > .category-panel .category-summary {
+      padding: 9px 12px;
+      gap: 7px;
+    }
+    #checkInList > .category-panel .window-summary-head {
+      align-items: center;
+      gap: 10px;
+    }
+    #checkInList > .category-panel .category-title-wrap {
+      grid-auto-flow: column;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+    }
+    #checkInList > .category-panel .category-chip {
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    #checkInList > .category-panel .category-copy {
+      font-size: 0.74rem;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #checkInList > .category-panel .category-toggle {
+      min-height: 26px;
+      min-width: 26px;
+      font-size: 1rem;
+    }
+
+    /* Window stats become a single wrapping row of tiny label/value pairs. */
+    #checkInList > .category-panel .window-summary-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 6px;
+    }
+    #checkInList > .category-panel .window-summary-stat {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--paper-soft);
+      border: 1px solid var(--line-soft);
+    }
+    #checkInList > .category-panel .window-summary-label {
+      font-size: 0.63rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+    }
+    #checkInList > .category-panel .window-summary-stat strong {
+      font-size: 0.74rem;
+      line-height: 1.2;
+    }
+    #checkInList > .category-panel .window-summary-copy { font-size: 0.74rem; }
+    #checkInList > .category-panel .window-elapsed-bar { height: 5px; }
+    #checkInList > .category-panel .window-progress-copy { font-size: 0.66rem; }
+    #checkInList > .category-panel .window-summary-progress { gap: 3px; }
+
+    #checkInList > .category-panel .category-body { padding: 0 10px 10px; }
+    #checkInList > .category-panel .window-done-bar { padding-bottom: 7px; }
+    #checkInList > .category-panel .window-show-done-btn {
+      font-size: 0.68rem;
+      padding: 2px 10px;
+    }
+    #checkInList > .category-panel .window-all-done {
+      font-size: 0.74rem;
+      padding: 4px 0;
+    }
+    #checkInList > .category-panel .window-grid { gap: 6px; }
+
+    /* ---- Habit bar ---- */
+    #checkInList .track-card {
+      padding: 8px 10px;
+      border-radius: 8px;
+      box-shadow: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+    }
+    #checkInList .track-card-head {
+      flex: 1 1 210px;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 0;
+    }
+    #checkInList .track-card-head > div:first-child { min-width: 0; }
+    #checkInList .track-card-title {
+      font-size: 0.82rem;
+      line-height: 1.25;
+      margin-bottom: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #checkInList .track-card-meta {
+      font-size: 0.68rem;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #checkInList .track-card-flags { margin-top: 3px; gap: 4px; }
+    #checkInList .track-flag {
+      min-height: 0;
+      padding: 1px 7px;
+      font-size: 0.6rem;
+    }
+    #checkInList .track-status-chip {
+      padding: 3px 9px;
+      font-size: 0.65rem;
+      flex: none;
+    }
+
+    /* Body flows inline beside the title instead of stacking beneath it. */
+    #checkInList .track-card-body {
+      flex: 1 1 260px;
+      min-width: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px 10px;
+    }
+    /* Days / Window meta reads as one quiet inline line. */
+    #checkInList .track-support {
+      display: flex;
+      gap: 10px;
+      flex: 0 1 auto;
+    }
+    #checkInList .track-support > div { display: flex; align-items: baseline; gap: 4px; }
+    #checkInList .track-support .label {
+      display: inline;
+      margin-bottom: 0;
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    #checkInList .track-support strong { font-size: 0.7rem; }
+    #checkInList .track-card-body > .mini-progress {
+      flex: 1 1 90px;
+      min-width: 70px;
+      height: 5px;
+    }
+    #checkInList .check-actions { gap: 5px; flex: none; }
+    #checkInList .track-card .inline-action,
+    #checkInList .track-card .toggle-action {
+      min-height: 26px;
+      padding: 3px 10px;
+      font-size: 0.7rem;
+    }
+    #checkInList .measure-row { gap: 5px; flex: none; }
+    #checkInList .measure-input {
+      /* The roomy layout let this grow and pushed the buttons onto a second
+         line; hold it to its own width so the row stays one line. */
+      flex: 0 0 auto;
+      min-width: 0;
+      width: 78px;
+      min-height: 26px;
+      padding: 3px 8px;
+      font-size: 0.72rem;
+    }
+    #checkInList .track-note {
+      flex: 1 1 100%;
+      font-size: 0.66rem;
+      line-height: 1.35;
+      margin: 0;
+    }
+
+    /* Timer collapses to one inline strip. */
+    #checkInList .timer-panel {
+      flex: 1 1 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px 9px;
+      padding: 6px 8px;
+      border-radius: 7px;
+      margin: 0;
+    }
+    #checkInList .timer-head { margin-bottom: 0; gap: 8px; flex: none; }
+    #checkInList .timer-title { display: none; }
+    #checkInList .timer-readout { gap: 7px; flex: none; }
+    #checkInList .timer-clock { font-size: 0.9rem; }
+    #checkInList .timer-state { padding: 1px 7px; font-size: 0.58rem; }
+    #checkInList .timer-progress {
+      flex: 1 1 110px;
+      min-width: 90px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    #checkInList .timer-progress-bar { flex: 1 1 auto; height: 5px; }
+    #checkInList .timer-progress-copy { font-size: 0.62rem; white-space: nowrap; }
+    #checkInList .timer-row { gap: 5px; flex: none; margin: 0; }
+
+    /* 30-day insights sit as one quiet trailing line. */
+    #checkInList .habit-insight-bar {
+      flex: 1 1 100%;
+      gap: 3px 14px;
+      margin-top: 2px;
+      padding-top: 5px;
+    }
+    #checkInList .insight-stat { flex-direction: row; align-items: baseline; gap: 4px; }
+    #checkInList .insight-val { font-size: 0.7rem; }
+    #checkInList .insight-lbl { font-size: 0.58rem; }
+
+    @media (max-width: 720px) {
+      #checkInList .track-card-head,
+      #checkInList .track-card-body { flex: 1 1 100%; }
+      #checkInList > .category-panel .category-title-wrap {
+        grid-auto-flow: row;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -2374,6 +2696,27 @@
           <div class="empty-state" id="emptyCheckin">
             No habits are active for this day yet. Add habits in the studio, choose their active days and windows, and they will show up here automatically.
           </div>
+          <section class="pace-panel" id="pacePanel" hidden>
+            <div class="pace-head">
+              <span class="pace-title">Day pace</span>
+              <span class="pace-window" id="paceDayWindow"></span>
+              <span class="pace-verdict" id="paceVerdict"></span>
+            </div>
+            <div class="pace-bar" id="paceBar">
+              <span class="pace-done" id="paceDoneFill"></span>
+              <span class="pace-left" id="paceLeftFill"></span>
+              <span class="pace-now" id="paceNowMark"></span>
+            </div>
+            <div class="pace-stats">
+              <div class="pace-stat"><span class="pace-k">Time in hand</span><strong id="paceInHand">—</strong></div>
+              <div class="pace-stat"><span class="pace-k">Targeted</span><strong id="paceTargeted">—</strong></div>
+              <div class="pace-stat"><span class="pace-k">Finished</span><strong id="paceFinished">—</strong></div>
+              <div class="pace-stat"><span class="pace-k">Yet to finish</span><strong id="paceRemaining">—</strong></div>
+              <div class="pace-stat"><span class="pace-k">Free after habits</span><strong id="paceSlack">—</strong></div>
+            </div>
+            <div class="pace-note" id="paceNote"></div>
+          </section>
+
           <div class="board-utility-bar">
             <button class="date-button timers-toggle" type="button" id="toggleActiveTimers" aria-pressed="false">Active timers</button>
             <span class="board-utility-spacer"></span>
@@ -2715,6 +3058,178 @@
 
       // Catch a window lapsing while the page sits idle.
       window.setInterval(refresh, 20000);
+
+      refresh();
+      window.setTimeout(refresh, 800);
+    })();
+  </script>
+
+  <!-- Feature: day pace. Reads the windows the board already rendered to work
+       out how much of the day is left, how much habit time is still owed, and
+       whether that fits — so a back-loaded day is visible before it arrives.
+       UI-only: it derives everything from the board and the clock. -->
+  <script>
+    (function () {
+      var checkIn = document.getElementById("checkInList");
+      var panel = document.getElementById("pacePanel");
+      var dayInput = document.getElementById("dayInput");
+      if (!checkIn || !panel) { return; }
+
+      function el(id) { return document.getElementById(id); }
+
+      function localTodayStr() {
+        var d = new Date();
+        return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+          "-" + String(d.getDate()).padStart(2, "0");
+      }
+
+      function isToday() {
+        return !dayInput || !dayInput.value || dayInput.value === localTodayStr();
+      }
+
+      // "6:30 AM - 9:30 AM" -> both ends in minutes from midnight.
+      function chipRange(text) {
+        var re = /(\d{1,2}):(\d{2})\s*(AM|PM)/gi;
+        var found = [], m;
+        while ((m = re.exec(text)) !== null) {
+          var h = parseInt(m[1], 10);
+          var mi = parseInt(m[2], 10);
+          var ap = m[3].toUpperCase();
+          if (ap === "PM" && h !== 12) { h += 12; }
+          if (ap === "AM" && h === 12) { h = 0; }
+          found.push(h * 60 + mi);
+        }
+        if (found.length < 2) { return null; }
+        return { start: found[0], end: found[found.length - 1] };
+      }
+
+      // The board writes durations as "2h 30m", "45m", "1h" or "0m".
+      function parseDuration(text) {
+        var t = String(text || "");
+        var total = 0, matched = false;
+        var h = /(\d+(?:\.\d+)?)\s*h/i.exec(t);
+        var mm = /(\d+(?:\.\d+)?)\s*m/i.exec(t);
+        if (h) { total += parseFloat(h[1]) * 60; matched = true; }
+        if (mm) { total += parseFloat(mm[1]); matched = true; }
+        return matched ? total : 0;
+      }
+
+      function fmtHM(mins) {
+        mins = Math.max(0, Math.round(mins));
+        var h = Math.floor(mins / 60), m = mins % 60;
+        if (h && m) { return h + "h " + m + "m"; }
+        if (h) { return h + "h"; }
+        return m + "m";
+      }
+
+      function fmtClock(mins) {
+        mins = ((Math.round(mins) % 1440) + 1440) % 1440;
+        var h = Math.floor(mins / 60), m = mins % 60;
+        var ap = h >= 12 ? "PM" : "AM";
+        var hh = h % 12; if (hh === 0) { hh = 12; }
+        return hh + ":" + String(m).padStart(2, "0") + " " + ap;
+      }
+
+      function collect() {
+        var panels = checkIn.querySelectorAll(":scope > .category-panel");
+        if (!panels.length) { return null; }
+
+        var dayStart = null, dayEnd = null;
+        var targeted = 0, logged = 0;
+
+        for (var i = 0; i < panels.length; i++) {
+          var p = panels[i];
+          var chip = p.querySelector(".category-chip");
+          var range = chip ? chipRange(chip.textContent || "") : null;
+          if (range) {
+            if (dayStart === null || range.start < dayStart) { dayStart = range.start; }
+            if (dayEnd === null || range.end > dayEnd) { dayEnd = range.end; }
+          }
+          var t = p.querySelector("[data-window-target]");
+          var l = p.querySelector("[data-window-logged]");
+          if (t) { targeted += parseDuration(t.textContent); }
+          if (l) { logged += parseDuration(l.textContent); }
+        }
+
+        if (dayStart === null || dayEnd === null || dayEnd <= dayStart) { return null; }
+        return { dayStart: dayStart, dayEnd: dayEnd, targeted: targeted, logged: logged };
+      }
+
+      function refresh() {
+        // Only meaningful for today — a past day has no time left to pace.
+        if (!isToday()) { panel.hidden = true; return; }
+        var d = collect();
+        if (!d || d.targeted <= 0) { panel.hidden = true; return; }
+
+        var now = new Date();
+        var nowMin = now.getHours() * 60 + now.getMinutes();
+        var dayLength = d.dayEnd - d.dayStart;
+        var inHand = Math.max(0, d.dayEnd - Math.max(nowMin, d.dayStart));
+        var remaining = Math.max(0, d.targeted - d.logged);
+        var slack = inHand - remaining;
+
+        panel.hidden = false;
+        panel.classList.remove("is-tight", "is-behind", "is-done");
+
+        var verdict, note;
+        if (remaining <= 0) {
+          panel.classList.add("is-done");
+          verdict = "All planned time done";
+          note = "Every targeted minute for today is logged. " + fmtHM(inHand) + " of the day is still yours.";
+        } else if (nowMin >= d.dayEnd) {
+          panel.classList.add("is-behind");
+          verdict = "Day closed short";
+          note = "The day's last window has ended with " + fmtHM(remaining) + " of planned time unlogged.";
+        } else if (slack < 0) {
+          panel.classList.add("is-behind");
+          verdict = "Over capacity";
+          note = "You owe " + fmtHM(remaining) + " but only " + fmtHM(inHand) +
+            " remains — about " + fmtHM(-slack) + " more than the day can hold. Trim or move something.";
+        } else if (slack < remaining * 0.25) {
+          panel.classList.add("is-tight");
+          verdict = "Tight — back-loaded";
+          note = fmtHM(remaining) + " left against " + fmtHM(inHand) +
+            " of day. Almost every remaining minute is spoken for; start now to avoid a crushed evening.";
+        } else {
+          verdict = "On pace";
+          note = fmtHM(remaining) + " of habit time left with " + fmtHM(inHand) +
+            " in hand — " + fmtHM(slack) + " to spare.";
+        }
+
+        // Bar: planned time laid against the whole day, plus where "now" sits.
+        var donePct = dayLength > 0 ? Math.min(100, (d.logged / dayLength) * 100) : 0;
+        var leftPct = dayLength > 0 ? Math.min(100 - donePct, (remaining / dayLength) * 100) : 0;
+        var nowPct = dayLength > 0
+          ? Math.max(0, Math.min(100, ((nowMin - d.dayStart) / dayLength) * 100))
+          : 0;
+
+        el("paceDoneFill").style.width = donePct + "%";
+        el("paceLeftFill").style.width = leftPct + "%";
+        el("paceNowMark").style.left = nowPct + "%";
+
+        el("paceDayWindow").textContent = fmtClock(d.dayStart) + " – " + fmtClock(d.dayEnd);
+        el("paceVerdict").textContent = verdict;
+        el("paceInHand").textContent = fmtHM(inHand);
+        el("paceTargeted").textContent = fmtHM(d.targeted);
+        el("paceFinished").textContent = fmtHM(d.logged);
+        el("paceRemaining").textContent = fmtHM(remaining);
+        el("paceSlack").textContent = slack >= 0 ? fmtHM(slack) : ("-" + fmtHM(-slack));
+        el("paceNote").textContent = note;
+      }
+
+      var queued = null;
+      function schedule() {
+        if (queued) { return; }
+        queued = window.setTimeout(function () { queued = null; refresh(); }, 80);
+      }
+
+      if ("MutationObserver" in window) {
+        new MutationObserver(schedule).observe(checkIn, {
+          childList: true, subtree: true, characterData: true
+        });
+      }
+      if (dayInput) { dayInput.addEventListener("change", schedule); }
+      window.setInterval(refresh, 30000);
 
       refresh();
       window.setTimeout(refresh, 800);
