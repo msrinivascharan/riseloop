@@ -2264,13 +2264,38 @@
     .pace-panel {
       --pace: var(--c-green);
       --pace-soft: var(--c-green-soft);
-      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 14px;
       margin-bottom: 12px;
       border: 1px solid var(--line);
       border-left: 4px solid var(--pace);
       border-radius: 10px;
       background: linear-gradient(180deg, var(--pace-soft), var(--paper) 70%);
     }
+    .pace-ring-wrap { flex: none; display: flex; align-items: center; }
+    .pace-panel .progress-ring { width: 62px; height: 62px; }
+    .pace-panel .progress-ring span { font-size: 0.86rem; }
+    .pace-main { flex: 1 1 auto; min-width: 0; }
+    .pace-sep {
+      width: 1px;
+      align-self: stretch;
+      background: var(--line);
+      margin: 0 2px;
+    }
+    /* With no pace to show (a past day, or no timed habits) the ring and the
+       habit counts still stand on their own. */
+    .pace-panel.no-pace { --pace: var(--accent); --pace-soft: var(--accent-soft); }
+    .pace-panel.no-pace .is-pace,
+    .pace-panel.no-pace .pace-bar,
+    .pace-panel.no-pace .pace-note,
+    .pace-panel.no-pace .pace-window,
+    .pace-panel.no-pace .pace-verdict { display: none; }
+    .pace-stat.c-green strong { color: var(--c-green-strong); }
+    .pace-stat.c-blue strong { color: var(--c-blue-strong); }
+    .pace-stat.c-coral strong { color: var(--c-coral-strong); }
+    .pace-stat.c-amber strong { color: var(--c-amber-strong); }
     .pace-panel.is-tight  { --pace: var(--c-amber); --pace-soft: var(--c-amber-soft); }
     .pace-panel.is-behind { --pace: var(--c-coral); --pace-soft: var(--c-coral-soft); }
     .pace-panel.is-done   { --pace: var(--c-blue);  --pace-soft: var(--c-blue-soft); }
@@ -2340,6 +2365,12 @@
     }
     .pace-stat strong { font-size: 0.75rem; }
     .pace-note { margin-top: 6px; font-size: 0.68rem; color: var(--muted); line-height: 1.4; }
+
+    @media (max-width: 720px) {
+      .pace-panel { flex-direction: column; align-items: stretch; gap: 10px; }
+      .pace-ring-wrap { justify-content: center; }
+      .pace-sep { display: none; }
+    }
 
     /* ================================================================
        Dense board — windows and habits as lean left-aligned bars.
@@ -2662,60 +2693,42 @@
             <input class="date-input" id="dayInput" type="date" />
           </div>
 
-          <div class="progress-strip">
-            <div class="progress-hero">
-              <div class="ring-wrap">
-                <div class="progress-ring" id="progressRing">
-                  <span id="progressPercent">0%</span>
-                </div>
-              </div>
-              <div class="progress-caption">
-                This score reflects the habits already unlocked for the selected day.
+          <section class="pace-panel" id="pacePanel">
+            <div class="pace-ring-wrap">
+              <div class="progress-ring" id="progressRing">
+                <span id="progressPercent">0%</span>
               </div>
             </div>
-            <div class="progress-grid">
-              <div class="progress-card c-green">
-                <span class="label">Completed</span>
-                <strong id="progressCompleted">0</strong>
+            <div class="pace-main">
+              <div class="pace-head">
+                <span class="pace-title">Day pace</span>
+                <span class="pace-window" id="paceDayWindow"></span>
+                <span class="pace-verdict" id="paceVerdict"></span>
               </div>
-              <div class="progress-card c-blue">
-                <span class="label">In progress</span>
-                <strong id="progressInProgress">0</strong>
+              <div class="pace-bar" id="paceBar">
+                <span class="pace-done" id="paceDoneFill"></span>
+                <span class="pace-left" id="paceLeftFill"></span>
+                <span class="pace-now" id="paceNowMark"></span>
               </div>
-              <div class="progress-card c-coral">
-                <span class="label">Not done</span>
-                <strong id="progressSkipped">0</strong>
+              <div class="pace-stats">
+                <div class="pace-stat c-green"><span class="pace-k">Completed</span><strong id="progressCompleted">0</strong></div>
+                <div class="pace-stat c-blue"><span class="pace-k">In progress</span><strong id="progressInProgress">0</strong></div>
+                <div class="pace-stat c-coral"><span class="pace-k">Not done</span><strong id="progressSkipped">0</strong></div>
+                <div class="pace-stat c-amber"><span class="pace-k">Total habits</span><strong id="progressTotal">0</strong></div>
+                <span class="pace-sep is-pace"></span>
+                <div class="pace-stat is-pace"><span class="pace-k">Time in hand</span><strong id="paceInHand">—</strong></div>
+                <div class="pace-stat is-pace"><span class="pace-k">Targeted</span><strong id="paceTargeted">—</strong></div>
+                <div class="pace-stat is-pace"><span class="pace-k">Finished</span><strong id="paceFinished">—</strong></div>
+                <div class="pace-stat is-pace"><span class="pace-k">Yet to finish</span><strong id="paceRemaining">—</strong></div>
+                <div class="pace-stat is-pace"><span class="pace-k">Free after habits</span><strong id="paceSlack">—</strong></div>
               </div>
-              <div class="progress-card c-amber">
-                <span class="label">Total habits</span>
-                <strong id="progressTotal">0</strong>
-              </div>
+              <div class="pace-note" id="paceNote"></div>
             </div>
-          </div>
+          </section>
 
           <div class="empty-state" id="emptyCheckin">
             No habits are active for this day yet. Add habits in the studio, choose their active days and windows, and they will show up here automatically.
           </div>
-          <section class="pace-panel" id="pacePanel" hidden>
-            <div class="pace-head">
-              <span class="pace-title">Day pace</span>
-              <span class="pace-window" id="paceDayWindow"></span>
-              <span class="pace-verdict" id="paceVerdict"></span>
-            </div>
-            <div class="pace-bar" id="paceBar">
-              <span class="pace-done" id="paceDoneFill"></span>
-              <span class="pace-left" id="paceLeftFill"></span>
-              <span class="pace-now" id="paceNowMark"></span>
-            </div>
-            <div class="pace-stats">
-              <div class="pace-stat"><span class="pace-k">Time in hand</span><strong id="paceInHand">—</strong></div>
-              <div class="pace-stat"><span class="pace-k">Targeted</span><strong id="paceTargeted">—</strong></div>
-              <div class="pace-stat"><span class="pace-k">Finished</span><strong id="paceFinished">—</strong></div>
-              <div class="pace-stat"><span class="pace-k">Yet to finish</span><strong id="paceRemaining">—</strong></div>
-              <div class="pace-stat"><span class="pace-k">Free after habits</span><strong id="paceSlack">—</strong></div>
-            </div>
-            <div class="pace-note" id="paceNote"></div>
-          </section>
 
           <div class="board-utility-bar">
             <button class="date-button timers-toggle" type="button" id="toggleActiveTimers" aria-pressed="false">Active timers</button>
@@ -3087,31 +3100,36 @@
         return !dayInput || !dayInput.value || dayInput.value === localTodayStr();
       }
 
-      // "6:30 AM - 9:30 AM" -> both ends in minutes from midnight.
-      function chipRange(text) {
-        var re = /(\d{1,2}):(\d{2})\s*(AM|PM)/gi;
-        var found = [], m;
-        while ((m = re.exec(text)) !== null) {
-          var h = parseInt(m[1], 10);
-          var mi = parseInt(m[2], 10);
-          var ap = m[3].toUpperCase();
-          if (ap === "PM" && h !== 12) { h += 12; }
-          if (ap === "AM" && h === 12) { h = 0; }
-          found.push(h * 60 + mi);
-        }
-        if (found.length < 2) { return null; }
-        return { start: found[0], end: found[found.length - 1] };
+      // Backend "HH:MM" -> minutes from midnight.
+      function hhmmToMinutes(text) {
+        var m = /^(\d{1,2}):(\d{2})$/.exec(String(text || "").trim());
+        if (!m) { return null; }
+        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
       }
 
-      // The board writes durations as "2h 30m", "45m", "1h" or "0m".
-      function parseDuration(text) {
-        var t = String(text || "");
-        var total = 0, matched = false;
-        var h = /(\d+(?:\.\d+)?)\s*h/i.exec(t);
-        var mm = /(\d+(?:\.\d+)?)\s*m/i.exec(t);
-        if (h) { total += parseFloat(h[1]) * 60; matched = true; }
-        if (mm) { total += parseFloat(mm[1]); matched = true; }
-        return matched ? total : 0;
+      // Only habits measured in time contribute a duration to the day.
+      var TIME_UNITS = [
+        { re: /\b(sec|secs|second|seconds)\b/i, mult: 1 / 60 },
+        { re: /\b(m|min|mins|minute|minutes)\b/i, mult: 1 },
+        { re: /\b(h|hr|hrs|hour|hours)\b/i, mult: 60 }
+      ];
+      function unitMinutes(unit) {
+        var u = String(unit || "");
+        for (var i = 0; i < TIME_UNITS.length; i++) {
+          if (TIME_UNITS[i].re.test(u)) { return TIME_UNITS[i].mult; }
+        }
+        return 0;
+      }
+
+      function activeBackend() {
+        var g = window.SystemHabitsBackend;
+        try {
+          if (g && g.getMeta && g.getMeta().signedIn && g.listWindowsForDate) {
+            var w = g.listWindowsForDate(dayInput && dayInput.value ? dayInput.value : localTodayStr());
+            if (w && w.length) { return g; }
+          }
+        } catch (e) {}
+        return window.SystemHabitsBackendLocal || g || null;
       }
 
       function fmtHM(mins) {
@@ -3130,36 +3148,72 @@
         return hh + ":" + String(m).padStart(2, "0") + " " + ap;
       }
 
+      // Ask the backend for every window the day has, not just the ones the
+      // board has revealed. The board hides windows that haven't started, so
+      // reading it would end the day at whichever window happens to be last
+      // on screen and report the evening as already over.
       function collect() {
-        var panels = checkIn.querySelectorAll(":scope > .category-panel");
-        if (!panels.length) { return null; }
+        var backend = activeBackend();
+        if (!backend || !backend.listWindowsForDate) { return null; }
+
+        var dateKey = (dayInput && dayInput.value) || localTodayStr();
+        var windows;
+        try { windows = backend.listWindowsForDate(dateKey) || []; }
+        catch (e) { return null; }
+        if (!windows.length) { return null; }
 
         var dayStart = null, dayEnd = null;
-        var targeted = 0, logged = 0;
-
-        for (var i = 0; i < panels.length; i++) {
-          var p = panels[i];
-          var chip = p.querySelector(".category-chip");
-          var range = chip ? chipRange(chip.textContent || "") : null;
-          if (range) {
-            if (dayStart === null || range.start < dayStart) { dayStart = range.start; }
-            if (dayEnd === null || range.end > dayEnd) { dayEnd = range.end; }
-          }
-          var t = p.querySelector("[data-window-target]");
-          var l = p.querySelector("[data-window-logged]");
-          if (t) { targeted += parseDuration(t.textContent); }
-          if (l) { logged += parseDuration(l.textContent); }
+        for (var i = 0; i < windows.length; i++) {
+          var s = hhmmToMinutes(windows[i].windowStart);
+          var e2 = hhmmToMinutes(windows[i].windowEnd);
+          if (s === null || e2 === null) { continue; }
+          if (dayStart === null || s < dayStart) { dayStart = s; }
+          if (dayEnd === null || e2 > dayEnd) { dayEnd = e2; }
         }
-
         if (dayStart === null || dayEnd === null || dayEnd <= dayStart) { return null; }
+
+        // Sum per habit, not per window: a habit repeated across windows shares
+        // one daily target, so counting each appearance would inflate the day.
+        var seen = {}, targeted = 0, logged = 0;
+        windows.forEach(function (w) {
+          (w.habits || []).forEach(function (h) {
+            if (!h || seen[h.id] || h.enabled === false) { return; }
+            seen[h.id] = true;
+            if (h.type !== "measurable") { return; }
+            var mult = unitMinutes(h.unit);
+            if (!mult) { return; }
+
+            var target = 0;
+            try { target = Number(backend.getHabitDailyTarget(h)) || 0; } catch (e3) {}
+            if (target <= 0) { return; }
+
+            var entry = null;
+            try { entry = backend.getEntryForDate(h.id, dateKey); } catch (e4) {}
+            var value = Number(entry && entry.value);
+            if (!isFinite(value) || value < 0) { value = 0; }
+
+            targeted += target * mult;
+            // Cap at the target so overtime doesn't distort "how much of the
+            // plan is done" — finished plus remaining always equals targeted.
+            logged += Math.min(value, target) * mult;
+          });
+        });
+
+        if (targeted <= 0) { return null; }
         return { dayStart: dayStart, dayEnd: dayEnd, targeted: targeted, logged: logged };
+      }
+
+      function noPace() {
+        panel.classList.add("no-pace");
+        panel.classList.remove("is-tight", "is-behind", "is-done");
       }
 
       function refresh() {
         // Only meaningful for today — a past day has no time left to pace.
-        if (!isToday()) { panel.hidden = true; return; }
+        if (!isToday()) { noPace(); return; }
         var d = collect();
-        if (!d || d.targeted <= 0) { panel.hidden = true; return; }
+        if (!d || d.targeted <= 0) { noPace(); return; }
+        panel.classList.remove("no-pace");
 
         var now = new Date();
         var nowMin = now.getHours() * 60 + now.getMinutes();
@@ -3168,7 +3222,6 @@
         var remaining = Math.max(0, d.targeted - d.logged);
         var slack = inHand - remaining;
 
-        panel.hidden = false;
         panel.classList.remove("is-tight", "is-behind", "is-done");
 
         var verdict, note;
