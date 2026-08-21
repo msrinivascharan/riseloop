@@ -24,20 +24,23 @@ That means the app is intentionally opinionated in a few places:
 - past and active windows remain visible
 - habits can repeat across multiple windows while still sharing one underlying daily entry
 - measurable habits can use a persistent focus timer
-- the master habit list is editable and collapsible inside the app
+- the master habit list is editable from its own tab inside the app
 
 ## Current Product Shape
 
 This repo currently contains a browser-first app with a Google Sheets backend and a local fallback mode.
 
 The main experience is:
-- a bright, calm daily board
-- a Master Habit Studio for defining habits
-- a Google Sheets-backed storage model
-- window-based grouping for the daily flow
+- a dense daily board split into three tabs: **Today's Board**, **Habit Studio**, and **Master List**
+- windows rendered as lean left-aligned strips, each holding its habits as compact bars
+- a day pace panel that weighs the habit time still owed against the time left in the day
+- a floating **Active timers** view showing only habits whose focus timer is running
+- window-based grouping for the daily flow, with lapsed-but-unfinished windows blinking as a reminder
+- a **Time Value** page that accounts for all 1,440 minutes of the day by habit category
+- a Google Sheets-backed storage model with a local fallback
 - focus timers for time-based measurable habits
 - repeated appearances of the same habit across multiple windows
-- completed habits auto-hide from their window once done or target met, with a per-window "Show done" toggle to reveal them
+- completed habits auto-hide from their window, with a per-window "Show done" toggle and a board-level "Hide finished windows" toggle
 - a 30-day streak and consistency insight bar on every habit card
 - a separate reports page for trends, analysis, and insights
 - an AI Analysis page powered by Groq (Llama 3.3 70B) for deep habit intelligence
@@ -48,11 +51,16 @@ The app title and UI are branded as `Riseloop Studio`.
 ## Core Features
 
 ### Daily Board
+
+The board lives under the **Today's Board** tab. **Habit Studio** (the create/edit form) and **Master List** sit in their own tabs, so the board stays the primary view. The app remembers which tab you were last on.
+
 - Habits are grouped by time window.
+- Each window is a slim strip with a coloured left rail; its habits sit inside as compact bars.
 - Windows are collapsible and start collapsed on refresh.
 - Only active and past windows appear on the board for today.
 - Future-day tracking is locked.
 - Each window shows a summary directly on the collapsed window card.
+- Editing a habit from the Master List jumps you to the Habit Studio tab automatically.
 
 Window summary includes:
 - one merged habit-progress box showing total, done, and pending
@@ -66,13 +74,45 @@ Window summary includes:
 
 Once a habit is complete in a window it disappears automatically:
 - checkbox habits vanish as soon as they are marked Done
-- measurable habits vanish once the logged value reaches the window-level target
+- measurable habits vanish when **either** that window's own target is met **or** the shared daily total is reached
 
-This is per-window, not global:
-- if the same habit has repeat windows and the target is not yet met in a later window, it still appears there
-- if all habits in a window are done, the window shows "All habits in this window are done."
+Those two rules work together for habits spread across windows. A habit targeting 50 minutes as 25 + 25:
+- log 25 in the morning and the morning window clears, while the evening one still asks for the rest
+- log all 50 in the morning, or 20 there and 30 later, and it clears everywhere — hitting a set amount in each window is never required
+- until the day's total is reached it stays visible in every one of its windows, so the remainder can be logged wherever it actually happens
+
+When every habit in a window is done it shows "All habits in this window are done."
 
 Each window with completed habits shows a **Show N done** button inside the open panel. Clicking it reveals or hides the completed cards. The count of done habits is also shown in the collapsed window header.
+
+### Window Reminders and Decluttering
+
+Two board behaviors keep the day honest without adding noise:
+
+- **Lapsed-window reminder** — a window whose end time has passed while it still has unfinished habits blinks slowly, so work you skipped stays visible instead of scrolling away. It stops the moment the last habit is done, and only ever applies to today.
+- **Hide finished windows** — a toggle above the board removes windows that have nothing left to do, whether they ended or you simply finished early. The count of hidden windows is shown on the button, and the choice is remembered.
+
+Windows still showing unfinished work are never hidden.
+
+### Day Pace
+
+A single panel above the board answers whether the day is on track or being pushed into its last hours.
+
+The day runs from **your earliest window start to your latest window end**, taken from every window the day holds — including ones that have not opened yet, so an evening still ahead is counted.
+
+It shows:
+- the completion ring and the Completed / In progress / Not done / Total habit counts
+- **Time in hand** — from now to the end of your last window
+- **Targeted**, **Finished**, **Yet to finish**, and **Free after habits**
+- a bar of finished versus still-owed time across the day, with a marker for now
+
+The verdict reads *On pace*, *Tight — back-loaded*, *Over capacity*, or *All planned time done*. Over capacity spells out the overflow, e.g. *"You owe 5h but only 2h 29m remains — about 2h 31m more than the day can hold."*
+
+Only time-based measurable habits contribute; each habit counts once against its daily target, so repeated windows never inflate the day.
+
+### Active Timers View
+
+A compact panel, opened from the **Active timers** button, lists only habits whose focus timer is running — each with its habit name, the window it belongs to, a live clock and its progress. A habit repeated across windows shares one timer and so appears once, listing every window it covers. Selecting an entry jumps to the real habit card, which stays the only place a timer is started, paused or reset.
 
 ### 30-Day Insight Bar
 
@@ -89,7 +129,7 @@ This gives an at-a-glance sense of how consistent a habit has been without openi
 - Edit existing habits from the UI.
 - Change name, category, type, target, unit, active days, notes, window, and repetition windows.
 - Repetition windows are chosen from valid existing windows in the system.
-- The master list is collapsible so the daily board stays primary.
+- The master list lives in its own tab, so the daily board stays primary.
 
 ### Habit Types
 - `Checkbox`: done or not done
@@ -121,9 +161,11 @@ Important behavior:
 Time-based measurable habits can show a habit-level focus timer.
 
 Current behavior:
-- starts from `0`
+- the clock shows **the current session only** and starts from `0`
+- the day's running total lives on the progress line beneath it, e.g. `120 / 300 minutes logged`
 - works like a persistent stopwatch, not a countdown
-- every `Pause` adds the elapsed session to the habit's logged value
+- every `Pause` adds the elapsed session to the habit's logged value and resets the clock to `0`
+- `Reset` clears the running session; it never deletes logged minutes (use `Reset` beside `Save` for that)
 - survives refresh, browser close, app reopen, and system restart through local persistence
 - pause/save writes the repeated-window allocation back into the day entry
 - shows a small progress bar against the habit target
@@ -380,7 +422,10 @@ Use the daily board to:
 - mark checkbox habits done
 - log measurable habits
 - try the focus timer for time-based habits
+- watch the day pace panel to see whether the rest of the day still fits
 - open `Reports` after a few days of data
+
+Then open **Time Value** to account for the whole day: import your logged habit time one category at a time, and add the rest by hand. Your Google session carries across pages, so it should already be connected; if it is not, use **Connect Google Sheets** there.
 
 ### 9. Enable AI Analysis (Optional)
 After a week or more of data:
@@ -498,6 +543,7 @@ Do not create separate habits if they are truly the same underlying behavior.
 index.html
 reports.html
 ai_insights.html
+time_value.html
 system_habits_app.js
 system_habits_ai.js
 system_habits_backend.google.js
@@ -506,6 +552,7 @@ system_habits_config.example.js
 system_habits_config.local.js   ← create this from the example (gitignored, not in repo)
 system_habits_reports.js
 system_habits_shared.js
+system_habits_time.js
 scripts/
   start_riseloop_server.ps1
   start_riseloop_server_hidden.vbs
@@ -515,13 +562,15 @@ scripts/
 - `index.html`: main product UI and navigation to reports
 - `reports.html`: the dedicated analytics and insights page
 - `ai_insights.html`: AI Analysis page — daily, weekly, monthly, and deep 6-dimension analysis
+- `time_value.html`: Time Value page — where the day's 1,440 minutes actually went
 - `system_habits_app.js`: board rendering, timers, editor, scoring, daily behavior
 - `system_habits_ai.js`: AI analysis engine — data computation (Phase A–G) and Groq API integration
 - `system_habits_backend.google.js`: Google Sheets backend
 - `system_habits_backend.local.js`: local fallback backend using browser localStorage
 - `system_habits_config.example.js`: config template — copy this to `system_habits_config.local.js` and fill in your keys
 - `system_habits_reports.js`: reports engine for charts, trends, correlations, and window intelligence
-- `system_habits_shared.js`: shared config and older parsing helpers
+- `system_habits_shared.js`: shared config, parsing helpers, and the app-wide toast notifications
+- `system_habits_time.js`: Time Value engine — day accounting, habit-time import, and the category breakdown
 - `scripts/start_riseloop_server.ps1`: PowerShell script to start the local Python server
 - `scripts/start_riseloop_server_hidden.vbs`: VBScript launcher to run the server silently on Windows startup
 
@@ -602,6 +651,10 @@ What is there now:
 - positive correlations and negative or tradeoff correlations between habits
 - window intelligence showing planned time, logged time, unlogged time, spare capacity, and target-hit behavior across the last 30 days
 
+Also on the reports page:
+- **Weekly goal pace** on every Knowledge Acquisition habit card. The category charts already plot actual against target; the pace strip adds whether the period in progress is on track and how hard to push, e.g. *"Behind pace — 235 minutes to go. Push about 59 minutes/day across the 4 active days left."* The goal follows the existing rule: daily target × active days in the period.
+- **Auto-backup** (Chrome/Edge). Pick a file once and the app writes a full JSON snapshot of your habits and entries to it every 2 hours, surviving reloads. Cross-browser export is still on the roadmap.
+
 Important design choice:
 - window intelligence still uses each habit's primary window only, so repeated appearances do not yet produce full per-window historical analytics
 - correlations use recent daily progress patterns as signals, not proof of causation
@@ -609,6 +662,22 @@ Important design choice:
 This means:
 - the reports page and the daily board stay aligned because they read the same `StudioHabits` and `StudioEntries` backend
 - repeated-window allocations are now stored in day entries, but the reports layer still uses conservative primary-window analytics for window intelligence
+
+## Time Value Page
+
+`time_value.html` treats each day as **1,440 minutes** and asks where they actually went.
+
+Time is grouped by **your own habit categories** — the same names the board and reports use — plus a single **Drain** bucket for ad-hoc time that belongs to no habit category, and **Other** for activities not yet filed. There are no invented value tiers.
+
+What it does:
+- **Imports your logged habit time** for the selected day, one category at a time, so you can pull in Knowledge Acquisition now and Profession later without them overwriting each other. It imports the minutes you actually logged, never the scheduled window length, and only offers categories that have time logged that day.
+- **Logs everything else by hand** — either in minutes, or by entering a start and end time and letting it work out the duration (overnight spans such as 23:00 → 06:30 are handled).
+- **Keeps a configurable activity library**, each activity filed under one of your categories or Drain.
+- **Shows an end-of-day breakdown**: a card per category, a 24-hour bar including unaccounted time, and a 7-day trend.
+
+Day quality is the share of your accounted time that went to a real habit category — everything except Drain.
+
+Time Value data lives only in this browser's local storage. It is never written to your Google Sheet, and clearing site data clears it.
 
 ## Privacy and Security Notes
 
@@ -624,15 +693,19 @@ The repo already uses a local config pattern so public sharing is cleaner.
 ## Current Design Decisions
 
 Some behaviors are intentional and product-driven:
-- future windows are hidden
+- future windows are hidden from the board, but the day pace panel still counts them, so the day ends at your last window rather than the last one on screen
 - windows are the main unit of the daily view
-- the master list stays collapsible
+- the board, the habit form, and the master list are separate tabs
 - measurable habits default to `0`
 - repeated appearances share one habit id and one daily entry
 - repeated measurable habits persist their per-window allocations inside the entry data
 - window cards summarize their own time and progress
 - completed habit cards hide automatically and reappear only if the "Show done" toggle is on
-- auto-hide is evaluated per window, not per habit globally — the same habit can be hidden in one window and visible in another
+- auto-hide is evaluated per window — the same habit can be hidden in one window and visible in another — but the shared daily total clears it everywhere at once
+- a window can be hidden as soon as nothing is left to do in it, whether or not it has ended; blinking, being a warning about time running out, waits for the window to lapse
+- errors surface as non-blocking toasts rather than blocking browser alerts
+- one Google sign-in covers every page for the token's lifetime, instead of prompting again on each page
+- the board, reports, AI Analysis, and Time Value pages share one type scale, colour palette, and corner radius
 
 
 ## Reports Handbook
@@ -642,7 +715,7 @@ It explains every reports section, chart type, insight card, and the main interp
 ## Roadmap Ideas
 
 Possible next improvements:
-- add better export or backup tools
+- extend backup beyond Chrome/Edge — the 2-hourly auto-backup relies on the File System Access API, so a plain export/import would cover every browser
 - add non-destructive archive mode instead of hard delete
 - add per-window historical analytics for repeated habits (the daily insight bar is done; window-level history in reports is still conservative)
 - add category filters and saved report views
@@ -658,6 +731,7 @@ If you publish this repo:
 - document the Google setup clearly
 - make it clear that the main entry point is `index.html`
 - note that `ai_insights.html` requires a separate free Groq API key and works best with at least a week of data
+- note that `time_value.html` keeps its own data in browser local storage, separate from the Google Sheet
 
 ## Philosophy
 
