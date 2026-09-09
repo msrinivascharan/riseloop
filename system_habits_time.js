@@ -463,6 +463,63 @@
   // Silent one-time cleanup: on the first load after this update, erase every
   // Time Value day-log except today, then set a flag so it never runs again.
   // Touches ONLY "riseloop_tv_log:*" keys — nothing else in the app.
+  // One-time (2026-09-09): file the routine activities that had been sitting in
+  // "Other" under real categories, and introduce ADLs (activities of daily
+  // living) as a bucket of its own. There is no UI to name a brand-new category
+  // -- the dropdown is built from habit categories plus whatever the library
+  // already uses -- so ADLs is seeded here and stays available from then on
+  // because these activities carry it.
+  function applyCategoryMappingOnce() {
+    var FLAG = "riseloop_tv_mapped_v1";
+    var ADL = "ADLs";
+    try {
+      if (localStorage.getItem(FLAG) === "1") { return; }
+
+      var RENAME = {
+        "Morning Routine [Brushing, Emptying bowls, Breakfast]":
+          "Morning Routine [Brushing, Emptying bowls]"
+      };
+      var MAP = {
+        "Gym / workout": "Wellness",
+        "Breathing / meditation": "Wellness",
+        "Indoor walk": "Wellness",
+        "Family / dining": ADL,
+        "Morning Routine [Brushing, Emptying bowls]": ADL,
+        "Sleep": ADL
+      };
+
+      // Renames apply anywhere the old label appears. Re-filing is deliberately
+      // conservative: imported habit time keeps the category it came in with,
+      // and anything already filed by hand is left alone.
+      function refile(item) {
+        if (!item) { return; }
+        var name = String(item.name == null ? "" : item.name).trim();
+        if (RENAME[name]) { name = RENAME[name]; item.name = name; }
+        var target = MAP[name];
+        if (target && item.source !== "habit" &&
+            (!item.category || item.category === UNASSIGNED)) {
+          item.category = target;
+        }
+      }
+
+      state.activities.forEach(refile);
+      writeJSON(LS.activities, state.activities);
+
+      // Rows already logged store their own category, so past days need the
+      // same pass or they would keep showing "Other".
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k || k.indexOf(LS.logPrefix) !== 0) { continue; }
+        var rows = readJSON(k, null);
+        if (!rows || !rows.length) { continue; }
+        rows.forEach(refile);
+        writeJSON(k, rows);
+      }
+
+      localStorage.setItem(FLAG, "1");
+    } catch (e) {}
+  }
+
   function purgeOncePastDays() {
     var FLAG = "riseloop_tv_purged_v1";
     try {
@@ -745,6 +802,7 @@
   function start() {
     purgeOncePastDays();
     dropLegacySettings();
+    applyCategoryMappingOnce();
     state.entries = loadEntries(state.dateKey);
     var input = doc.getElementById("tvDate");
     if (input) { input.value = state.dateKey; }
