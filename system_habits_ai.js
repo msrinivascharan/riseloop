@@ -2,11 +2,29 @@
   "use strict";
 
   // ── Config ────────────────────────────────────────────────────────────────
-  const GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions";
-  const GROQ_MODEL = (window.SystemHabitsConfig && window.SystemHabitsConfig.groqModel) || "llama-3.3-70b-versatile";
+  const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-  function groqKey() {
-    return (window.SystemHabitsConfig && window.SystemHabitsConfig.groqApiKey) || "";
+  // Model ids get retired, and a retired one comes back as a 404 that reads
+  // like a broken key. Rather than pin one, ask the key which models it can
+  // actually use and take the first of these it offers.
+  const GEMINI_MODEL_PREFS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-flash-latest",
+    "gemini-1.5-flash"
+  ];
+
+  let resolvedModel = null;
+
+  function geminiKey() {
+    const key = (window.SystemHabitsConfig && window.SystemHabitsConfig.geminiApiKey) || "";
+    // An unedited placeholder is worse than an empty one: it looks configured
+    // and then fails deep inside the request.
+    return /^(YOUR_|PASTE_|REPLACE)/i.test(key) ? "" : key;
+  }
+
+  function configuredModel() {
+    return (window.SystemHabitsConfig && window.SystemHabitsConfig.geminiModel) || "";
   }
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
@@ -618,40 +636,99 @@
     };
   }
 
-  // ── Groq API ──────────────────────────────────────────────────────────────
-  async function callGroq(systemPrompt, userPrompt) {
-    const key = groqKey();
-    if (!key || key.length < 10) {
-      throw new Error("Groq API key not configured — add groqApiKey to system_habits_config.local.js");
-    }
-    const res = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": "Bearer " + key
-      },
-      body: JSON.stringify({
-        model:       GROQ_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user",   content: userPrompt   }
-        ],
-        temperature: 0.7,
-        max_tokens:  1800
-      }),
-      signal: AbortSignal.timeout(60000)
+  // ── Gemini API ────────────────────────────────────────────────────────────
+  async function listUsableModels(key) {
+    const res = await fetch(GEMINI_BASE + "/models?key=" + encodeURIComponent(key), {
+      signal: AbortSignal.timeout(20000)
     });
+    if (!res.ok) {
+      const text = await res.text().catch(function () { return ""; });
+      throw new Error("Gemini returned " + res.status + " while listing models: " + text.slice(0, 200));
+    }
+    const data = await res.json();
+    return (data.models || [])
+      .filter(function (m) {
+        return (m.supportedGenerationMethods || []).indexOf("generateContent") !== -1;
+      })
+      .map(function (m) { return String(m.name || "").replace(/^models\//, ""); });
+  }
+
+  async function resolveModel(key, force) {
+    const pinned = configuredModel();
+    if (pinned) { return pinned; }
+    if (resolvedModel && !force) { return resolvedModel; }
+
+    const available = await listUsableModels(key);
+    if (!available.length) {
+      throw new Error("This Gemini key has no models that support generateContent.");
+    }
+
+    for (let i = 0; i < GEMINI_MODEL_PREFS.length; i++) {
+      if (available.indexOf(GEMINI_MODEL_PREFS[i]) !== -1) {
+        resolvedModel = GEMINI_MODEL_PREFS[i];
+        return resolvedModel;
+      }
+    }
+
+    // Nothing preferred on offer — fall back to any plain flash model before
+    // anything at all, to stay on the cheap, fast end of what the key allows.
+    const flash = available.filter(function (n) {
+      return /flash/i.test(n) && !/thinking|image|audio|tts|embedding|vision/i.test(n);
+    });
+    resolvedModel = flash[0] || available[0];
+    return resolvedModel;
+  }
+
+  async function generateOnce(key, model, systemPrompt, userPrompt) {
+    return fetch(
+      GEMINI_BASE + "/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(key),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1800 }
+        }),
+        signal: AbortSignal.timeout(60000)
+      }
+    );
+  }
+
+  async function callGemini(systemPrompt, userPrompt) {
+    const key = geminiKey();
+    if (!key || key.length < 10) {
+      throw new Error("Gemini API key not configured — add geminiApiKey to system_habits_config.local.js");
+    }
+
+    let model = await resolveModel(key, false);
+    let res   = await generateOnce(key, model, systemPrompt, userPrompt);
+
+    // A model can be retired between runs; re-check the list once before
+    // reporting failure, so this never becomes a dead page again.
+    if (res.status === 404 && !configuredModel()) {
+      model = await resolveModel(key, true);
+      res   = await generateOnce(key, model, systemPrompt, userPrompt);
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(function () { return ""; });
-      throw new Error("Groq returned " + res.status + ": " + text.slice(0, 300));
+      throw new Error("Gemini returned " + res.status + " for " + model + ": " + text.slice(0, 300));
     }
 
-    const data    = await res.json();
-    const content = data && data.choices && data.choices[0] &&
-                    data.choices[0].message && data.choices[0].message.content;
-    if (!content) throw new Error("Groq returned an empty response.");
-    return content.trim();
+    const data  = await res.json();
+    const cand  = data && data.candidates && data.candidates[0];
+    const parts = cand && cand.content && cand.content.parts;
+    const content = parts
+      ? parts.map(function (part) { return part.text || ""; }).join("").trim()
+      : "";
+
+    if (!content) {
+      const reason = (data && data.promptFeedback && data.promptFeedback.blockReason) ||
+                     (cand && cand.finishReason) || "";
+      throw new Error("Gemini returned an empty response" + (reason ? " (" + reason + ")" : "") + ".");
+    }
+    return content;
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────
@@ -681,7 +758,7 @@
     if (loading) {
       btn.textContent = "Gemini is thinking…";
       res.className   = "ai-result ai-loading";
-      res.textContent = "Analysing your habit data with Groq — usually ready in 2 – 5 seconds.";
+      res.textContent = "Analysing your habit data with Gemini — usually ready in 2 – 5 seconds.";
     } else {
       btn.textContent = BUTTON_LABELS[type];
     }
@@ -700,7 +777,7 @@
     setLoading(type, true);
     try {
       const p    = promptFn();
-      const text = await callGroq(p.system, p.user);
+      const text = await callGemini(p.system, p.user);
       setResult(type, text, false);
     } catch (err) {
       setResult(type, "Error: " + err.message, true);
@@ -757,16 +834,33 @@
     });
   });
 
-  // ── Groq key status indicator ─────────────────────────────────────────────
+  // ── Gemini key status indicator ───────────────────────────────────────────
+  function setGeminiStatus(ready, message, html) {
+    if (!els.geminiStatus) { return; }
+    els.geminiStatus.className = "ai-status " + (ready ? "ai-status-ready" : "ai-status-offline");
+    els.geminiStatus.innerHTML = '<div class="ai-dot"></div>';
+    const span = document.createElement("span");
+    if (html) { span.innerHTML = html; } else { span.textContent = message; }
+    els.geminiStatus.appendChild(span);
+  }
+
   if (els.geminiStatus) {
-    if (groqKey().length > 10) {
-      els.geminiStatus.className = "ai-status ai-status-ready";
-      els.geminiStatus.innerHTML =
-        '<div class="ai-dot"></div><span>Groq — ' + GROQ_MODEL + ' — API key configured and ready</span>';
+    const statusKey = geminiKey();
+    if (statusKey.length > 10) {
+      const pinned = configuredModel();
+      if (pinned) {
+        setGeminiStatus(true, "Gemini — " + pinned + " — API key configured and ready");
+      } else {
+        setGeminiStatus(true, "Gemini — API key configured, checking which model it can use…");
+        resolveModel(statusKey, false).then(function (model) {
+          setGeminiStatus(true, "Gemini — " + model + " — API key configured and ready");
+        }).catch(function (err) {
+          setGeminiStatus(false, "Gemini key set, but no usable model: " + (err && err.message ? err.message : err));
+        });
+      }
     } else {
-      els.geminiStatus.className = "ai-status ai-status-offline";
-      els.geminiStatus.innerHTML =
-        '<div class="ai-dot"></div><span>Groq API key missing — add <code>groqApiKey</code> to system_habits_config.local.js</span>';
+      setGeminiStatus(false, null,
+        'Gemini API key missing — add <code>geminiApiKey</code> to system_habits_config.local.js');
     }
   }
 

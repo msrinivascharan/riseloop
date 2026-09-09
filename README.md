@@ -43,7 +43,7 @@ The main experience is:
 - completed habits auto-hide from their window, with a per-window "Show done" toggle and a board-level "Hide finished windows" toggle
 - a 30-day streak and consistency insight bar on every habit card
 - a separate reports page for trends, analysis, and insights
-- an AI Analysis page powered by Groq (Llama 3.3 70B) for deep habit intelligence
+- an AI Analysis page powered by Google Gemini for deep habit intelligence
 - mobile and touch-optimized across all pages
 
 The app title and UI are branded as `Riseloop Studio`.
@@ -429,8 +429,8 @@ Then open **Time Value** to account for the whole day: import your logged habit 
 
 ### 9. Enable AI Analysis (Optional)
 After a week or more of data:
-- create a free Groq API key at **console.groq.com** (no credit card)
-- add `groqApiKey` to your `system_habits_config.local.js`
+- create a free Gemini API key at **aistudio.google.com/apikey** (no credit card)
+- add `geminiApiKey` to your `system_habits_config.local.js`
 - open `http://localhost:8000/ai_insights.html`
 - try **Deep Analysis** for the full 6-dimension report
 
@@ -487,7 +487,7 @@ window.SystemHabitsConfig = {
   spreadsheetId: "YOUR_GOOGLE_SHEET_ID",
   clientId: "YOUR_GOOGLE_OAUTH_CLIENT_ID",
   scopes: "https://www.googleapis.com/auth/spreadsheets",
-  groqApiKey: "YOUR_GROQ_API_KEY"   // optional — only needed for AI Analysis page
+  geminiApiKey: "YOUR_GEMINI_API_KEY"   // optional — only needed for AI Analysis page
 };
 ```
 
@@ -564,7 +564,7 @@ scripts/
 - `ai_insights.html`: AI Analysis page — daily, weekly, monthly, and deep 6-dimension analysis
 - `time_value.html`: Time Value page — where the day's 1,440 minutes actually went
 - `system_habits_app.js`: board rendering, timers, editor, scoring, daily behavior
-- `system_habits_ai.js`: AI analysis engine — data computation (Phase A–G) and Groq API integration
+- `system_habits_ai.js`: AI analysis engine — data computation (Phase A–G) and Gemini API integration
 - `system_habits_backend.google.js`: Google Sheets backend
 - `system_habits_backend.local.js`: local fallback backend using browser localStorage
 - `system_habits_config.example.js`: config template — copy this to `system_habits_config.local.js` and fill in your keys
@@ -576,7 +576,7 @@ scripts/
 
 ## AI Analysis Page
 
-`ai_insights.html` provides four levels of AI-generated insight powered by Groq (Llama 3.3 70B, free tier, no credit card required).
+`ai_insights.html` provides four levels of AI-generated insight powered by Google Gemini (free tier, no credit card required).
 
 ### How It Works
 
@@ -613,8 +613,8 @@ The full 6-dimension report in one response:
 
 ### Setup for AI Analysis
 
-1. Create a free account at **console.groq.com** (no credit card required)
-2. Go to **API Keys → Create API key**
+1. Get a free key at **aistudio.google.com/apikey** (no credit card required)
+2. Click **Create API key** and copy it
 3. Add the key to `system_habits_config.local.js`:
 
 ```js
@@ -623,20 +623,22 @@ window.SystemHabitsConfig = {
   spreadsheetId: "YOUR_GOOGLE_SHEET_ID",
   clientId: "YOUR_GOOGLE_OAUTH_CLIENT_ID",
   scopes: "https://www.googleapis.com/auth/spreadsheets",
-  groqApiKey: "YOUR_GROQ_API_KEY"
+  geminiApiKey: "YOUR_GEMINI_API_KEY"
 };
 ```
 
 4. Open `http://localhost:8000/ai_insights.html`
 5. Connect Google Sheets, then click any analysis button
 
-The default model is `llama-3.3-70b-versatile`. To override, add `groqModel: "your-model-name"` to the config.
+**No model id to maintain.** Model names get retired, and a retired one comes back as a `404 model_not_found` that reads like a broken key — which is exactly how the previous Groq integration died. So the app asks your key which models it can use, prefers a current Flash model, and re-checks once automatically if a model disappears mid-use. The model actually in use is shown in the status bar at the top of the page.
 
-Free tier limits: 14,400 requests per day, 30 requests per minute — more than enough for personal daily use.
+To pin one anyway, add `geminiModel: "gemini-2.5-flash"` to the config.
+
+Gemini's free tier is generous enough for personal daily use; current limits are listed in Google AI Studio.
 
 ### Privacy Note for AI Analysis
 
-Habit summaries (completion rates, streaks, category names, day-of-week patterns) are sent to Groq's API for processing. Raw entry text and notes are not sent. If privacy is a concern, the AI Analysis page can simply not be used — the daily board and reports page work entirely offline.
+Habit summaries (completion rates, streaks, category names, day-of-week patterns) are sent to Google's Gemini API for processing. Raw entry text and notes are not sent. If privacy is a concern, the AI Analysis page can simply not be used — the daily board and reports page work entirely offline.
 
 ---
 
@@ -730,7 +732,7 @@ If you publish this repo:
 - exclude `system_habits_config.local.js` (already in `.gitignore`)
 - document the Google setup clearly
 - make it clear that the main entry point is `index.html`
-- note that `ai_insights.html` requires a separate free Groq API key and works best with at least a week of data
+- note that `ai_insights.html` requires a separate free Gemini API key and works best with at least a week of data
 - note that `time_value.html` keeps its own data in browser local storage, separate from the Google Sheet
 
 ## Philosophy
