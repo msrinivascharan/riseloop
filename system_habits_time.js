@@ -463,30 +463,45 @@
   // Silent one-time cleanup: on the first load after this update, erase every
   // Time Value day-log except today, then set a flag so it never runs again.
   // Touches ONLY "riseloop_tv_log:*" keys — nothing else in the app.
-  // One-time (2026-09-09): file the routine activities that had been sitting in
-  // "Other" under real categories, and introduce ADLs (activities of daily
-  // living) as a bucket of its own. There is no UI to name a brand-new category
-  // -- the dropdown is built from habit categories plus whatever the library
-  // already uses -- so ADLs is seeded here and stays available from then on
-  // because these activities carry it.
-  function applyCategoryMappingOnce() {
-    var FLAG = "riseloop_tv_mapped_v1";
-    var ADL = "ADLs";
-    try {
-      if (localStorage.getItem(FLAG) === "1") { return; }
-
-      var RENAME = {
+  // One-time category filings, applied in order. Each batch carries its own
+  // flag and runs exactly once, so a later hand edit in the library survives
+  // the next load. There is no UI to name a brand-new category -- the dropdown
+  // is built from habit categories plus whatever the library already uses --
+  // so new buckets like ADLs and Socialization are seeded here and stay
+  // available from then on because the activities carry them.
+  var CATEGORY_FILINGS = [
+    {
+      flag: "riseloop_tv_mapped_v1",
+      rename: {
         "Morning Routine [Brushing, Emptying bowls, Breakfast]":
           "Morning Routine [Brushing, Emptying bowls]"
-      };
-      var MAP = {
+      },
+      map: {
         "Gym / workout": "Wellness",
         "Breathing / meditation": "Wellness",
         "Indoor walk": "Wellness",
-        "Family / dining": ADL,
-        "Morning Routine [Brushing, Emptying bowls]": ADL,
-        "Sleep": ADL
-      };
+        "Family / dining": "ADLs",
+        "Morning Routine [Brushing, Emptying bowls]": "ADLs",
+        "Sleep": "ADLs"
+      }
+    },
+    {
+      flag: "riseloop_tv_mapped_v2",
+      rename: {},
+      map: {
+        "Socializing with friends": "Socialization",
+        "Kitchen / cooking": "ADLs"
+      }
+    }
+  ];
+
+  function applyCategoryFilings() {
+    CATEGORY_FILINGS.forEach(applyFilingOnce);
+  }
+
+  function applyFilingOnce(batch) {
+    try {
+      if (localStorage.getItem(batch.flag) === "1") { return; }
 
       // Renames apply anywhere the old label appears. Re-filing is deliberately
       // conservative: imported habit time keeps the category it came in with,
@@ -494,8 +509,8 @@
       function refile(item) {
         if (!item) { return; }
         var name = String(item.name == null ? "" : item.name).trim();
-        if (RENAME[name]) { name = RENAME[name]; item.name = name; }
-        var target = MAP[name];
+        if (batch.rename[name]) { name = batch.rename[name]; item.name = name; }
+        var target = batch.map[name];
         if (target && item.source !== "habit" &&
             (!item.category || item.category === UNASSIGNED)) {
           item.category = target;
@@ -516,7 +531,7 @@
         writeJSON(k, rows);
       }
 
-      localStorage.setItem(FLAG, "1");
+      localStorage.setItem(batch.flag, "1");
     } catch (e) {}
   }
 
@@ -802,7 +817,7 @@
   function start() {
     purgeOncePastDays();
     dropLegacySettings();
-    applyCategoryMappingOnce();
+    applyCategoryFilings();
     state.entries = loadEntries(state.dateKey);
     var input = doc.getElementById("tvDate");
     if (input) { input.value = state.dateKey; }
