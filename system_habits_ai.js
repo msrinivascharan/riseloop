@@ -4,17 +4,15 @@
   // ── Config ────────────────────────────────────────────────────────────────
   const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-  // Model ids get retired, and a retired one comes back as a 404 that reads
-  // like a broken key. Rather than pin one, ask the key which models it can
-  // actually use and take the first of these it offers.
-  const GEMINI_MODEL_PREFS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-flash-latest",
-    "gemini-1.5-flash"
-  ];
+  // Model ids get retired, and listing them is not enough: the API still
+  // advertises models a key may no longer call ("no longer available to new
+  // users"). A favourite id hardcoded here is exactly how this broke before,
+  // so nothing is named — rank whatever the key offers, newest first, and
+  // step past any the API refuses.
+  const MODEL_EXCLUDE = /preview|experimental|thinking|image|audio|tts|embedding|vision|live|realtime/i;
 
-  let resolvedModel = null;
+  const refusedModels = Object.create(null);
+  let availableModels = null;
 
   function geminiKey() {
     const key = (window.SystemHabitsConfig && window.SystemHabitsConfig.geminiApiKey) || "";
@@ -653,30 +651,59 @@
       .map(function (m) { return String(m.name || "").replace(/^models\//, ""); });
   }
 
+  function modelRank(name) {
+    const version = /(\d+(?:\.\d+)?)/.exec(name);
+    return {
+      name: name,
+      version: version ? parseFloat(version[1]) : 0,
+      flash: /flash/i.test(name) ? 1 : 0
+    };
+  }
+
+  // Best first: cheap and fast, then newest, then the plainest name — so a
+  // future gemini-4 wins on its own without anyone editing this file.
+  function rankedCandidates() {
+    const usable = (availableModels || []).filter(function (name) {
+      return !refusedModels[name] && !MODEL_EXCLUDE.test(name);
+    });
+
+    const ranked = usable.map(modelRank).sort(function (a, b) {
+      if (b.flash !== a.flash) { return b.flash - a.flash; }
+      if (b.version !== a.version) { return b.version - a.version; }
+      return a.name.length - b.name.length;
+    }).map(function (entry) { return entry.name; });
+
+    if (ranked.length) { return ranked; }
+    return (availableModels || []).filter(function (name) { return !refusedModels[name]; });
+  }
+
+  async function ensureModelList(key, force) {
+    if (!availableModels || force) { availableModels = await listUsableModels(key); }
+    return availableModels;
+  }
+
   async function resolveModel(key, force) {
     const pinned = configuredModel();
     if (pinned) { return pinned; }
-    if (resolvedModel && !force) { return resolvedModel; }
 
-    const available = await listUsableModels(key);
-    if (!available.length) {
-      throw new Error("This Gemini key has no models that support generateContent.");
+    await ensureModelList(key, force);
+    const candidates = rankedCandidates();
+    if (!candidates.length) {
+      throw new Error("This Gemini key has no usable models that support generateContent.");
     }
+    return candidates[0];
+  }
 
-    for (let i = 0; i < GEMINI_MODEL_PREFS.length; i++) {
-      if (available.indexOf(GEMINI_MODEL_PREFS[i]) !== -1) {
-        resolvedModel = GEMINI_MODEL_PREFS[i];
-        return resolvedModel;
-      }
+  // A 404 usually names the replacement, e.g. "use models/gemini-3.6-flash".
+  // Following that is more reliable than guessing from the list again.
+  function suggestedModelFrom(text, failedModel) {
+    const re = /models\/([A-Za-z0-9.\-]+)/g;
+    let match;
+    while ((match = re.exec(text)) !== null) {
+      const name = match[1];
+      if (name !== failedModel && !refusedModels[name]) { return name; }
     }
-
-    // Nothing preferred on offer — fall back to any plain flash model before
-    // anything at all, to stay on the cheap, fast end of what the key allows.
-    const flash = available.filter(function (n) {
-      return /flash/i.test(n) && !/thinking|image|audio|tts|embedding|vision/i.test(n);
-    });
-    resolvedModel = flash[0] || available[0];
-    return resolvedModel;
+    return "";
   }
 
   async function generateOnce(key, model, systemPrompt, userPrompt) {
@@ -701,34 +728,55 @@
       throw new Error("Gemini API key not configured — add geminiApiKey to system_habits_config.local.js");
     }
 
-    let model = await resolveModel(key, false);
-    let res   = await generateOnce(key, model, systemPrompt, userPrompt);
+    const pinned = configuredModel();
+    try { await ensureModelList(key, false); } catch (err) { availableModels = availableModels || []; }
 
-    // A model can be retired between runs; re-check the list once before
-    // reporting failure, so this never becomes a dead page again.
-    if (res.status === 404 && !configuredModel()) {
-      model = await resolveModel(key, true);
-      res   = await generateOnce(key, model, systemPrompt, userPrompt);
-    }
+    let nextModel = pinned;
+    let lastError = "";
 
-    if (!res.ok) {
+    // Walk down the candidates: being listed does not guarantee a key may call
+    // a model, so a refusal has to move us on rather than end the run.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const model = nextModel || rankedCandidates()[0];
+      if (!model) { break; }
+      nextModel = "";
+
+      const res = await generateOnce(key, model, systemPrompt, userPrompt);
+
+      if (res.ok) {
+        const data  = await res.json();
+        const cand  = data && data.candidates && data.candidates[0];
+        const parts = cand && cand.content && cand.content.parts;
+        const content = parts
+          ? parts.map(function (part) { return part.text || ""; }).join("").trim()
+          : "";
+
+        if (!content) {
+          const reason = (data && data.promptFeedback && data.promptFeedback.blockReason) ||
+                         (cand && cand.finishReason) || "";
+          throw new Error("Gemini returned an empty response" + (reason ? " (" + reason + ")" : "") + ".");
+        }
+        return content;
+      }
+
       const text = await res.text().catch(function () { return ""; });
-      throw new Error("Gemini returned " + res.status + " for " + model + ": " + text.slice(0, 300));
+      lastError = "Gemini returned " + res.status + " for " + model + ": " + text.slice(0, 300);
+
+      // 404 means this id is gone or closed to this key. Never try it again,
+      // and prefer the replacement Google names in the error itself.
+      if (res.status === 404 && !pinned) {
+        refusedModels[model] = true;
+        nextModel = suggestedModelFrom(text, model);
+        if (!nextModel) {
+          try { await ensureModelList(key, true); } catch (err) { /* keep the list we have */ }
+        }
+        continue;
+      }
+
+      throw new Error(lastError);
     }
 
-    const data  = await res.json();
-    const cand  = data && data.candidates && data.candidates[0];
-    const parts = cand && cand.content && cand.content.parts;
-    const content = parts
-      ? parts.map(function (part) { return part.text || ""; }).join("").trim()
-      : "";
-
-    if (!content) {
-      const reason = (data && data.promptFeedback && data.promptFeedback.blockReason) ||
-                     (cand && cand.finishReason) || "";
-      throw new Error("Gemini returned an empty response" + (reason ? " (" + reason + ")" : "") + ".");
-    }
-    return content;
+    throw new Error(lastError || "Gemini could not find a model this key is allowed to call.");
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────

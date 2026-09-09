@@ -630,9 +630,11 @@ window.SystemHabitsConfig = {
 4. Open `http://localhost:8000/ai_insights.html`
 5. Connect Google Sheets, then click any analysis button
 
-**No model id to maintain.** Model names get retired, and a retired one comes back as a `404 model_not_found` that reads like a broken key — which is exactly how the previous Groq integration died. So the app asks your key which models it can use, prefers a current Flash model, and re-checks once automatically if a model disappears mid-use. The model actually in use is shown in the status bar at the top of the page.
+**No model id to maintain.** Model names get retired, and a retired one comes back as a `404` that reads like a broken key — which is exactly how the previous Groq integration died. So the app asks your key which models it can use and ranks them itself: Flash variants first, then the newest version number, then the plainest name (preview/experimental/image/audio/vision builds are skipped). A future `gemini-4-flash` therefore wins on its own with no code change.
 
-To pin one anyway, add `geminiModel: "gemini-2.5-flash"` to the config.
+Listing is not a guarantee — the API will advertise models your key cannot actually call (`"no longer available to new users"`). So on a `404` the app remembers that model as refused, follows the replacement Google names in the error text if there is one, otherwise re-lists and steps to its next choice — up to five attempts. Any non-`404` (bad key, quota) fails immediately instead of pointlessly walking the list. The model actually in use is shown in the status bar at the top of the page.
+
+To pin one anyway, add `geminiModel: "gemini-3.6-flash"` to the config — a pinned model is used as-is and never walked away from, so you own keeping it valid.
 
 Gemini's free tier is generous enough for personal daily use; current limits are listed in Google AI Studio.
 
