@@ -196,6 +196,7 @@
     renderDashboard();
     renderEntries();
     renderTrend();
+    renderPastePreview(false);
   }
 
   function renderDashboard() {
@@ -282,7 +283,8 @@
       row.className = "entry";
       var cat = e.category || UNASSIGNED;
       var color = categoryColor(cat).base;
-      var src = e.source === "habit" ? '<span class="src">from habit</span>' : "";
+      var src = e.source === "habit" ? '<span class="src">from habit</span>'
+        : (e.source === PASTE_SOURCE ? '<span class="src">from WellnessTrax</span>' : "");
       row.innerHTML =
         '<span class="e-dot" style="background:' + color + '"></span>' +
         '<span class="e-name">' + escapeHtml(e.name) + src + '</span>' +
@@ -365,6 +367,7 @@
     setText(doc.getElementById("tvLibCount"), state.activities.length + " activities");
     renderCategoryOptions(doc.getElementById("tvNewCategory"), allCategories()[0]);
     renderActivitySelect();
+    renderPastePreview(false);
   }
 
   /* ---------- actions ---------- */
@@ -782,6 +785,15 @@
   function bind() {
     on("tvAddBtn", "click", addEntry);
     on("tvImportHabits", "click", importHabits);
+    on("tvPasteApply", "click", applyPaste);
+    on("tvPasteClear", "click", clearPaste);
+    var pasteEl = doc.getElementById("tvPasteInput");
+    if (pasteEl) {
+      pasteEl.addEventListener("input", function () {
+        clearTimeout(pasteTimer);
+        pasteTimer = setTimeout(function () { renderPastePreview(true); }, 200);
+      });
+    }
     on("tvConnectBtn", "click", connectGoogle);
     on("tvAddActivity", "click", addActivity);
     on("tvPrevDay", "click", function () { setDate(shiftKey(state.dateKey, -1)); });
@@ -810,6 +822,232 @@
       var tsel = e.target.closest && e.target.closest("[data-cat-for]");
       if (tsel) { setActivityCategory(tsel.getAttribute("data-cat-for"), tsel.value); }
     });
+  }
+
+  /* ---------- paste from WellnessTrax ---------- */
+  // WellnessTrax exports each day's "time-spent" JSON. Every entry is matched to
+  // an activity in the library by name; anything that can't be matched is listed
+  // so it can be logged by hand. Rows land on the entry's own date, and pasting
+  // the same day again replaces the earlier paste instead of adding it twice.
+  var PASTE_SOURCE = "wellnesstrax";
+  var pasteTimer = null;
+  var pastePlan = null;
+
+  function isDateKey(k) { return typeof k === "string" && /^\d{4}-\d{2}-\d{2}$/.test(k); }
+  function normName(s) { return String(s == null ? "" : s).toLowerCase().replace(/\s+/g, " ").trim(); }
+  function dayLabel(k) {
+    try { return keyToDate(k).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" }); }
+    catch (e) { return k; }
+  }
+  // "07:10" out of "2026-09-25T07:10:00+05:30" -- the export's own local time.
+  function clockOf(iso) {
+    var m = /T(\d{2}:\d{2})/.exec(String(iso || ""));
+    return m ? m[1] : "";
+  }
+
+  // Whole name first; failing that, one of the " / " parts of a library name,
+  // so "Gym" finds "Gym / workout". Deliberately no looser than that: "Post-meal
+  // walk" is not "Indoor walk", and a wrong guess is worse than no guess.
+  function matchActivity(name) {
+    var n = normName(name);
+    if (!n) { return null; }
+    var exact = null, part = null;
+    state.activities.forEach(function (a) {
+      var an = normName(a.name);
+      if (!exact && an === n) { exact = a; }
+      if (!part && an.indexOf("/") !== -1 &&
+          an.split("/").some(function (x) { return x.trim() === n; })) { part = a; }
+    });
+    return exact || part;
+  }
+
+  function parseTimeSpent(text) {
+    var raw = String(text || "").trim();
+    if (!raw) { return null; }
+    var data;
+    try { data = JSON.parse(raw); }
+    catch (e) { return { error: "That isn\u2019t valid JSON \u2014 paste the whole export, from the first { to the last }." }; }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return { error: "Expected a WellnessTrax export object." };
+    }
+    if (data.kind && data.kind !== "time-spent") {
+      return { error: "This is a \u201c" + data.kind + "\u201d export \u2014 Time Value takes the \u201ctime-spent\u201d one." };
+    }
+
+    var range = data.range || {};
+    var oneDay = isDateKey(range.from) && (!range.to || range.to === range.from) ? range.from : "";
+    var items = [];
+    if (Array.isArray(data.entries)) {
+      data.entries.forEach(function (e) {
+        if (!e || typeof e !== "object") { return; }
+        var fromStart = String(e.start || "").slice(0, 10);
+        items.push({
+          date: isDateKey(e.date) ? e.date : (isDateKey(fromStart) ? fromStart : oneDay),
+          activity: String(e.activity == null ? "" : e.activity).trim(),
+          minutes: Number(e.minutes),
+          start: clockOf(e.start), end: clockOf(e.end),
+          after: e.after ? String(e.after) : "",
+          includes: Array.isArray(e.includes) ? e.includes : []
+        });
+      });
+    } else if (data.total_minutes && typeof data.total_minutes === "object" && oneDay) {
+      // No per-entry detail: fall back to the day's totals.
+      Object.keys(data.total_minutes).forEach(function (k) {
+        items.push({ date: oneDay, activity: k, minutes: Number(data.total_minutes[k]),
+                     start: "", end: "", after: "", includes: [] });
+      });
+    }
+    if (!items.length) {
+      return { error: "No entries found \u2014 expected an \u201centries\u201d list of { date, activity, minutes }." };
+    }
+    return { items: items };
+  }
+
+  // Work out, row by row, what adding this paste would do -- before doing it.
+  function planPaste(parsed) {
+    var cache = {};
+    function onDay(date) { return cache[date] || (cache[date] = loadEntries(date)); }
+
+    var rows = parsed.items.map(function (it) {
+      var row = { item: it, date: it.date, activity: it.activity || "(unnamed)",
+                  minutes: Math.round(it.minutes), match: null, status: "ok", note: "" };
+      if (!it.date) { row.status = "bad"; row.note = "no date on this entry"; return row; }
+      if (!isFinite(it.minutes) || it.minutes <= 0 || it.minutes > 1440) {
+        row.status = "bad"; row.note = "minutes missing or out of range"; return row;
+      }
+      row.match = matchActivity(it.activity);
+      if (!row.match) { row.status = "unmapped"; row.note = "not in your activity list \u2014 log it by hand"; return row; }
+      // Time already on the day by another route would be counted twice.
+      var target = normName(row.match.name);
+      var clash = onDay(it.date).filter(function (e) {
+        return e.source !== PASTE_SOURCE && normName(e.name) === target;
+      })[0];
+      if (clash) {
+        row.status = "clash";
+        row.note = (clash.source === "habit" ? "already imported from your habits" : "already logged by hand") +
+          " that day (" + fmtHM(clash.minutes) + ") \u2014 skipped so it isn\u2019t counted twice";
+      }
+      return row;
+    });
+
+    var dates = [];
+    rows.forEach(function (r) { if (r.date && dates.indexOf(r.date) === -1) { dates.push(r.date); } });
+    dates.sort();
+    var ok = rows.filter(function (r) { return r.status === "ok"; });
+    var replacing = {};
+    dates.forEach(function (d) {
+      replacing[d] = onDay(d).filter(function (e) { return e.source === PASTE_SOURCE; }).length;
+    });
+    return { rows: rows, ok: ok, dates: dates, replacing: replacing,
+             okMinutes: ok.reduce(function (sum, r) { return sum + r.minutes; }, 0) };
+  }
+
+  function setPasteStatus(text, bad) {
+    var el = doc.getElementById("tvPasteStatus");
+    if (!el) { return; }
+    el.textContent = text || "";
+    el.hidden = !text;
+    el.classList.toggle("bad", !!bad);
+  }
+
+  function pasteRowHtml(r) {
+    var cls = r.status === "ok" ? "" : (r.status === "unmapped" ? " skip" : " skip warn");
+    var dot = r.match && r.status === "ok"
+      ? ' style="background:' + categoryColor(r.match.category || UNASSIGNED).base + '"' : "";
+    var to = "";
+    if (r.match) {
+      var cat = r.match.category || UNASSIGNED;
+      to = normName(r.match.name) === normName(r.activity)
+        ? " \u2192 " + cat : " \u2192 " + r.match.name + " \u00b7 " + cat;
+    }
+    var sub = [];
+    if (r.item.start && r.item.end) { sub.push(r.item.start + "\u2013" + r.item.end); }
+    if (r.item.after) { sub.push("after " + r.item.after); }
+    if (r.item.includes.length) {
+      sub.push("incl. " + r.item.includes.map(function (x) {
+        return (x && x.activity ? x.activity : "?") + (x && isFinite(Number(x.minutes)) ? " " + fmtHM(Number(x.minutes)) : "");
+      }).join(", "));
+    }
+    if (r.note) { sub.push(r.note); }
+    return '<div class="pv-row' + cls + '">' +
+      '<span class="pv-dot"' + dot + '></span>' +
+      '<span class="pv-name">' + escapeHtml(r.activity) + '<span class="pv-to">' + escapeHtml(to) + '</span></span>' +
+      '<span class="pv-time">' + (isFinite(r.minutes) && r.minutes > 0 ? fmtHM(r.minutes) : "\u2014") + '</span>' +
+      (sub.length ? '<span class="pv-sub">' + escapeHtml(sub.join(" \u00b7 ")) + '</span>' : "") +
+      '</div>';
+  }
+
+  // fromTyping: the textarea changed, so an emptied box also clears the status.
+  // Otherwise (a re-render after some other change) a result message is kept.
+  function renderPastePreview(fromTyping) {
+    var box = doc.getElementById("tvPastePreview");
+    var input = doc.getElementById("tvPasteInput");
+    var btn = doc.getElementById("tvPasteApply");
+    if (!box || !input) { return; }
+    var parsed = parseTimeSpent(input.value);
+    pastePlan = null;
+    box.innerHTML = "";
+    box.hidden = true;
+    if (btn) { btn.disabled = true; btn.textContent = "Add to log"; }
+    if (!parsed) { if (fromTyping) { setPasteStatus(""); } return; }
+    if (parsed.error) { setPasteStatus(parsed.error, true); return; }
+
+    var plan = planPaste(parsed);
+    pastePlan = plan;
+    var html = "";
+    plan.dates.forEach(function (d) {
+      var head = dayLabel(d);
+      if (plan.dates.length === 1 && d !== state.dateKey) { head += " \u00b7 not the day on screen \u2014 the log will switch to it"; }
+      if (plan.replacing[d]) { head += " \u00b7 replaces the earlier paste for this day"; }
+      html += '<div class="pv-date">' + escapeHtml(head) + '</div>';
+      plan.rows.forEach(function (r) { if (r.date === d) { html += pasteRowHtml(r); } });
+    });
+    var undated = plan.rows.filter(function (r) { return !r.date; });
+    if (undated.length) {
+      html += '<div class="pv-date">Couldn\u2019t place</div>';
+      undated.forEach(function (r) { html += pasteRowHtml(r); });
+    }
+    box.innerHTML = html;
+    box.hidden = false;
+
+    if (btn && plan.ok.length) {
+      btn.disabled = false;
+      btn.textContent = "Add " + plan.ok.length + (plan.ok.length === 1 ? " entry" : " entries") + " \u00b7 " + fmtHM(plan.okMinutes);
+    }
+    var skipped = plan.rows.length - plan.ok.length;
+    setPasteStatus(skipped ? (skipped + " of " + plan.rows.length + " won\u2019t be added \u2014 see the dashed rows.") :
+                             "Everything maps \u2014 nothing to do by hand.", false);
+  }
+
+  function applyPaste() {
+    renderPastePreview(false);   // re-plan against the latest library and log
+    var plan = pastePlan;
+    if (!plan || !plan.ok.length) { return; }
+
+    plan.dates.forEach(function (d) {
+      var fresh = plan.ok.filter(function (r) { return r.date === d; }).map(function (r) {
+        return { id: genId(), name: r.match.name, category: r.match.category || UNASSIGNED,
+                 minutes: r.minutes, source: PASTE_SOURCE };
+      });
+      var kept = loadEntries(d).filter(function (e) { return e.source !== PASTE_SOURCE; });
+      writeJSON(logKey(d), kept.concat(fresh));
+    });
+
+    var byHand = plan.rows.filter(function (r) { return r.status === "unmapped"; })
+      .map(function (r) { return r.activity; });
+    var landed = plan.ok[plan.ok.length - 1].date;
+    var input = doc.getElementById("tvPasteInput");
+    if (input) { input.value = ""; }
+    setDate(landed);
+    setPasteStatus("Added " + plan.ok.length + (plan.ok.length === 1 ? " entry" : " entries") + " (" +
+      fmtHM(plan.okMinutes) + ") to " + dayLabel(landed) + "." +
+      (byHand.length ? " Log by hand: " + byHand.join(", ") + "." : ""), false);
+  }
+
+  function clearPaste() {
+    var input = doc.getElementById("tvPasteInput");
+    if (input) { input.value = ""; input.focus(); }
+    renderPastePreview(true);
   }
 
   function on(id, ev, fn) { var el = doc.getElementById(id); if (el) { el.addEventListener(ev, fn); } }

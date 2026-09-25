@@ -158,6 +158,37 @@
     .import-row .imp-label { font-weight: 700; font-size: 0.85rem; color: var(--accent-strong); }
     .import-row input[type="date"] { min-height: 34px; padding: 6px 10px; }
     .import-row .imp-hint { font-size: 0.76rem; color: var(--muted); flex: 1 1 100%; }
+    /* Paste from WellnessTrax */
+    .paste-box { margin-bottom: 14px; background: var(--paper-soft); border: 1px solid var(--line-soft); border-radius: var(--radius-lg); }
+    .paste-box > summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; cursor: pointer; list-style: none; }
+    .paste-box > summary::-webkit-details-marker { display: none; }
+    .paste-box > summary::after { content: "▾"; margin-left: auto; color: var(--muted); transition: transform .15s; }
+    .paste-box[open] > summary::after { transform: rotate(180deg); }
+    .paste-box .imp-label { font-weight: 700; font-size: 0.85rem; color: var(--accent-strong); }
+    .paste-box .paste-sub { font-size: 0.76rem; color: var(--muted); }
+    .paste-body { padding: 0 12px 12px; display: grid; gap: 8px; }
+    .paste-body textarea {
+      width: 100%; min-height: 92px; resize: vertical; padding: 8px 10px;
+      font: 0.76rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+      border: 1px solid var(--line); border-radius: var(--radius-sm); background: rgba(255,255,255,0.95); color: var(--text); outline: none;
+    }
+    .paste-body textarea:focus { border-color: rgba(217,119,11,.5); box-shadow: 0 0 0 4px rgba(245,153,31,.14); }
+    .paste-preview { display: grid; gap: 6px; }
+    .paste-preview[hidden], .paste-status[hidden] { display: none; }
+    .pv-date { font-size: 0.7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+    .pv-row { display: grid; grid-template-columns: 10px minmax(0,1fr) auto; column-gap: 9px; row-gap: 2px; align-items: center; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--paper); border: 1px solid var(--line-soft); font-size: 0.84rem; }
+    .pv-row .pv-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .pv-row .pv-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pv-row .pv-to { font-weight: 600; color: var(--muted); }
+    .pv-row .pv-time { font-weight: 700; white-space: nowrap; }
+    .pv-row .pv-sub { grid-column: 2 / -1; font-size: 0.72rem; color: var(--muted); }
+    .pv-row.skip { background: transparent; border-style: dashed; }
+    .pv-row.skip .pv-dot { border: 1.5px dashed var(--muted); }
+    .pv-row.skip .pv-name, .pv-row.skip .pv-time { color: var(--muted); }
+    .pv-row.warn .pv-sub { color: var(--t-maintains-strong); }
+    .paste-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .paste-status { font-size: 0.78rem; color: var(--muted); }
+    .paste-status.bad { color: var(--t-drains-strong); font-weight: 600; }
     .entry-list { display: grid; gap: 8px; }
     .entry {
       display: grid; grid-template-columns: auto minmax(0,1fr) auto auto auto; gap: 10px; align-items: center;
@@ -284,6 +315,22 @@
           <button class="btn sm" type="button" id="tvImportHabits">Import for this day</button>
           <span class="imp-hint">Brings in the time you actually logged for the date shown above. Use ‹ Prev / Next › for other days.</span>
         </div>
+        <details class="paste-box" id="tvPasteBox">
+          <summary>
+            <span class="imp-label">{ } Paste from WellnessTrax</span>
+            <span class="paste-sub">Load a day&rsquo;s time-spent export into the log</span>
+          </summary>
+          <div class="paste-body">
+            <textarea id="tvPasteInput" spellcheck="false" aria-label="WellnessTrax time-spent JSON"
+              placeholder='Paste the WellnessTrax "time-spent" JSON here &mdash; a preview appears before anything is added.'></textarea>
+            <div class="paste-preview" id="tvPastePreview" hidden></div>
+            <div class="paste-actions">
+              <button class="btn primary sm" type="button" id="tvPasteApply" disabled>Add to log</button>
+              <button class="btn sm" type="button" id="tvPasteClear">Clear</button>
+              <span class="paste-status" id="tvPasteStatus" hidden></span>
+            </div>
+          </div>
+        </details>
         <div class="entry-list" id="tvEntryList"></div>
         <div class="empty" id="tvEntryEmpty" hidden>No time logged for this day yet. Add an activity above, or import your habit time.</div>
         <div class="day-total">
@@ -320,7 +367,7 @@
   <script src="system_habits_config.local.js"></script>
   <script src="system_habits_shared.js?v=20260803-toast2"></script>
   <script src="system_habits_backend.google.js?v=20260804-auth1"></script>
-  <script src="system_habits_time.js?v=20260909-adls2"></script>
+  <script src="system_habits_time.js?v=20260925-paste1"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 </body>

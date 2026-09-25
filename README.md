@@ -673,13 +673,29 @@ This means:
 
 Time is grouped by **your own habit categories** — the same names the board and reports use — plus a single **Drain** bucket for ad-hoc time that belongs to no habit category, and **Other** for activities not yet filed. There are no invented value tiers.
 
+Two buckets exist only here, not as habit categories: **ADLs** (activities of daily living — sleep, dining, morning routine, kitchen) and **Socialization**. The page has no control for naming a brand-new category, so these were introduced by one-time filings in `system_habits_time.js` (`CATEGORY_FILINGS`) and stay selectable because activities carry them.
+
 What it does:
 - **Imports your logged habit time** for the selected day, one category at a time, so you can pull in Knowledge Acquisition now and Profession later without them overwriting each other. It imports the minutes you actually logged, never the scheduled window length, and only offers categories that have time logged that day.
 - **Logs everything else by hand** — either in minutes, or by entering a start and end time and letting it work out the duration (overnight spans such as 23:00 → 06:30 are handled).
+- **Loads a WellnessTrax export** — open **Paste from WellnessTrax** under *Log your time* and paste that app's `time-spent` JSON. A preview shows what each entry maps to before anything is added. See below.
 - **Keeps a configurable activity library**, each activity filed under one of your categories or Drain.
 - **Shows an end-of-day breakdown**: a card per category, a 24-hour bar including unaccounted time, and a 7-day trend.
 
 Day quality is the share of your accounted time that went to a real habit category — everything except Drain.
+
+### Pasting a WellnessTrax export
+
+WellnessTrax can export a day's `time-spent` JSON (`{ app, kind: "time-spent", range, entries: [{ date, activity, minutes, start?, end?, includes? }] }`). Paste it into the box and:
+
+- **Each entry is matched to an activity in your library by name** — the whole name, or one side of a ` / ` name, so `Gym` finds `Gym / workout`. Nothing looser: `Post-meal walk` will not be guessed as `Indoor walk`. To make an entry map from then on, add an activity with that exact name under *Activities & settings*.
+- **Unmatched entries are listed, not added** — log those by hand.
+- **Rows land on the entry's own date.** If that isn't the day on screen, the preview says so and the page switches to it after adding.
+- **Pasting the same day again replaces the earlier paste** rather than adding it twice.
+- **It won't double-count.** If that activity is already on the day by another route — logged by hand or imported from your habits — the pasted row is skipped and the preview says why.
+- **`includes` are shown, never added** — they are already inside the parent entry's minutes (the Treadmill sessions inside a Gym block, for example).
+
+Pasted rows are marked *from WellnessTrax* in the log.
 
 Time Value data lives only in this browser's local storage. It is never written to your Google Sheet, and clearing site data clears it.
 
