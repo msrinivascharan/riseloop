@@ -854,7 +854,8 @@
   var PASTE_ALIASES = {
     "Nap": "Sleep",
     "Post-meal walk": "Indoor walk",
-    "Soleus pumps": "Gym / workout"
+    "Soleus pumps": "Gym / workout",
+    "Screen time": "Doomscrolling / idle"
   };
 
   // Whole name first; then one of the " / " parts of a library name, so "Gym"
