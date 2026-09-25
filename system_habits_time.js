@@ -284,7 +284,9 @@
       var cat = e.category || UNASSIGNED;
       var color = categoryColor(cat).base;
       var src = e.source === "habit" ? '<span class="src">from habit</span>'
-        : (e.source === PASTE_SOURCE ? '<span class="src">from WellnessTrax</span>' : "");
+        : (e.source === PASTE_SOURCE
+            ? '<span class="src">from WellnessTrax' + (e.origin ? ' \u00b7 ' + escapeHtml(e.origin) : '') + '</span>'
+            : "");
       row.innerHTML =
         '<span class="e-dot" style="background:' + color + '"></span>' +
         '<span class="e-name">' + escapeHtml(e.name) + src + '</span>' +
@@ -845,9 +847,19 @@
     return m ? m[1] : "";
   }
 
-  // Whole name first; failing that, one of the " / " parts of a library name,
-  // so "Gym" finds "Gym / workout". Deliberately no looser than that: "Post-meal
-  // walk" is not "Indoor walk", and a wrong guess is worse than no guess.
+  // WellnessTrax names you have said mean one of your library activities.
+  // Keys compare case-insensitively; each value is a library activity's name.
+  // An alias only applies when no activity already carries the WellnessTrax
+  // name, so creating an activity with that exact name later takes over.
+  var PASTE_ALIASES = {
+    "Nap": "Sleep",
+    "Post-meal walk": "Indoor walk",
+    "Soleus pumps": "Gym / workout"
+  };
+
+  // Whole name first; then one of the " / " parts of a library name, so "Gym"
+  // finds "Gym / workout"; then an alias above. Nothing is guessed beyond that --
+  // a wrong guess is worse than a row left for you to log by hand.
   function matchActivity(name) {
     var n = normName(name);
     if (!n) { return null; }
@@ -858,7 +870,14 @@
       if (!part && an.indexOf("/") !== -1 &&
           an.split("/").some(function (x) { return x.trim() === n; })) { part = a; }
     });
-    return exact || part;
+    if (exact || part) { return exact || part; }
+
+    var target = "";
+    Object.keys(PASTE_ALIASES).forEach(function (k) {
+      if (normName(k) === n) { target = normName(PASTE_ALIASES[k]); }
+    });
+    if (!target) { return null; }
+    return state.activities.filter(function (a) { return normName(a.name) === target; })[0] || null;
   }
 
   function parseTimeSpent(text) {
@@ -1026,8 +1045,12 @@
 
     plan.dates.forEach(function (d) {
       var fresh = plan.ok.filter(function (r) { return r.date === d; }).map(function (r) {
-        return { id: genId(), name: r.match.name, category: r.match.category || UNASSIGNED,
-                 minutes: r.minutes, source: PASTE_SOURCE };
+        var row = { id: genId(), name: r.match.name, category: r.match.category || UNASSIGNED,
+                    minutes: r.minutes, source: PASTE_SOURCE };
+        // Keep the WellnessTrax name when it differs, so a Nap filed under
+        // Sleep doesn't read as a duplicate Sleep row in the log.
+        if (normName(r.activity) !== normName(r.match.name)) { row.origin = r.activity; }
+        return row;
       });
       var kept = loadEntries(d).filter(function (e) { return e.source !== PASTE_SOURCE; });
       writeJSON(logKey(d), kept.concat(fresh));

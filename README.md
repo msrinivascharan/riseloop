@@ -688,14 +688,15 @@ Day quality is the share of your accounted time that went to a real habit catego
 
 WellnessTrax can export a day's `time-spent` JSON (`{ app, kind: "time-spent", range, entries: [{ date, activity, minutes, start?, end?, includes? }] }`). Paste it into the box and:
 
-- **Each entry is matched to an activity in your library by name** — the whole name, or one side of a ` / ` name, so `Gym` finds `Gym / workout`. Nothing looser: `Post-meal walk` will not be guessed as `Indoor walk`. To make an entry map from then on, add an activity with that exact name under *Activities & settings*.
+- **Each entry is matched to an activity in your library by name** — the whole name, or one side of a ` / ` name, so `Gym` finds `Gym / workout`. Nothing looser is ever guessed.
+- **Names that differ are mapped by explicit aliases** in `PASTE_ALIASES` (`system_habits_time.js`): `Nap` → Sleep, `Post-meal walk` → Indoor walk, `Soleus pumps` → Gym / workout. An alias only applies when no library activity already has the WellnessTrax name, so adding an activity with that exact name under *Activities & settings* takes over from the alias.
 - **Unmatched entries are listed, not added** — log those by hand.
 - **Rows land on the entry's own date.** If that isn't the day on screen, the preview says so and the page switches to it after adding.
 - **Pasting the same day again replaces the earlier paste** rather than adding it twice.
 - **It won't double-count.** If that activity is already on the day by another route — logged by hand or imported from your habits — the pasted row is skipped and the preview says why.
 - **`includes` are shown, never added** — they are already inside the parent entry's minutes (the Treadmill sessions inside a Gym block, for example).
 
-Pasted rows are marked *from WellnessTrax* in the log.
+Pasted rows are marked *from WellnessTrax* in the log, followed by the original WellnessTrax name when it differs — so a nap filed under Sleep reads *Sleep · from WellnessTrax · Nap* rather than looking like a duplicate.
 
 Time Value data lives only in this browser's local storage. It is never written to your Google Sheet, and clearing site data clears it.
 
