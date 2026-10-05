@@ -121,6 +121,7 @@ Every habit card shows a compact insight strip at the bottom of the card, visibl
 - **Day streak** — consecutive days the habit was completed (inactive days are skipped and do not break the streak)
 - **Last 30 days** — completions out of active days, e.g. `18/24`
 - **Monthly volume** — for measurable habits only: total logged vs total target across all active days in the last 30, e.g. `450/600 min`
+- **Avg start → target** — for timed habits: the average wall-clock time from first Start to reaching the target, over the days in the last 30 that reached it, e.g. `1h 25m avg start → target (6d)`. See *Start → Target Span* below.
 
 This gives an at-a-glance sense of how consistent a habit has been without opening Reports or AI Analysis.
 
@@ -174,6 +175,23 @@ The timer is available for measurable habits with time units such as:
 - `sec`, `second`, `seconds`
 - `min`, `mins`, `minute`, `minutes`
 - `hr`, `hrs`, `hour`, `hours`
+
+### Start → Target Span
+
+A 50-minute target rarely takes 50 minutes of your day. Each timed habit card shows how long reaching it actually took, from the **first Start of the day** to the **moment the day's target was reached** — pauses and breaks included:
+
+- while working: `Started 9:35 AM · 1h 12m so far · 38m focus + 34m breaks`
+- once reached: `Start → target 1h 32m (9:35 → 11:07 AM) · 50m focus + 42m breaks`
+
+How it is measured:
+- **The span opens on the first Start of the day** — but only while the target is still ahead. Starting a timer after the target is already met is extra time, not time spent getting there, so no span is shown.
+- **The span closes at the exact moment the target is reached**, worked out from the running session, so it is right even if the tab was closed when it happened. Work after that point does not stretch it.
+- **A manual Save that pushes the total over the target** closes it at the moment of the save.
+- **Dropping back under the target** — a lower Save, or a timer Reset that discards the run that crossed it — reopens the span.
+- **Focus** is the target itself; **breaks** are the rest of the span.
+- A habit whose windows are far apart would count the gap between them as breaks; today only Office work has a second window, and it starts a minute after the first ends.
+
+Spans are kept in this browser's local storage (`system-habits-focus-spans-v1`, last 120 days) — not in Google Sheets — so they start from the day this was added and are not shared across browsers or devices.
 
 ### Progress and Score
 Score is based on visible habits for the selected day context.

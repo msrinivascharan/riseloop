@@ -24,6 +24,9 @@
   ];
   const FOCUS_TIMER_STORAGE_KEY = "system-habits-focus-timers-v1";
   const WINDOW_LOG_STORAGE_KEY = "system-habits-window-logs-v1";
+  // Wall-clock span per habit per day: first Start -> daily target reached.
+  const FOCUS_SPAN_STORAGE_KEY = "system-habits-focus-spans-v1";
+  const FOCUS_SPAN_KEEP_DAYS = 120;
 
   function readPersistedTimerState() {
     try {
@@ -63,6 +66,7 @@
     windowLogs: readPersistedWindowLogState()
   };
   let timerIntervalId = null;
+  let focusSpans = readPersistedFocusSpans();
 
   const elements = {
     backendMeta: document.getElementById("backendMeta"),
@@ -231,6 +235,160 @@
     } catch (error) {
       // Ignore storage failures so the rest of the app remains usable.
     }
+  }
+
+  /* ---------- Focus span: first Start of the day -> target reached ----------
+     A timer session only remembers when its current run began (startedAtMs is
+     zeroed on every pause), so the wall-clock time it took to reach the day's
+     target -- pauses and breaks included -- is recorded separately here. */
+
+  function readPersistedFocusSpans() {
+    try {
+      const rawValue = window.localStorage.getItem(FOCUS_SPAN_STORAGE_KEY);
+      const parsedValue = rawValue ? JSON.parse(rawValue) : {};
+      return parsedValue && typeof parsedValue === "object" ? parsedValue : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function persistFocusSpans() {
+    try {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - FOCUS_SPAN_KEEP_DAYS);
+      const cutoffKey = googleBackend.formatDateKey(cutoff);
+      Object.keys(focusSpans).forEach((key) => {
+        if (key.split("::")[0] < cutoffKey) {
+          delete focusSpans[key];
+        }
+      });
+      window.localStorage.setItem(FOCUS_SPAN_STORAGE_KEY, JSON.stringify(focusSpans));
+    } catch (error) {
+      // Ignore storage failures so the rest of the app remains usable.
+    }
+  }
+
+  function getFocusSpanKey(habitId, dateKey) {
+    return `${dateKey}::${habitId}`;
+  }
+
+  // Opens the day's span on the first Start -- but only while the target is
+  // still ahead. Starting a timer after the target is already met is extra
+  // time, not time spent getting there.
+  function noteFocusStart(habit, dateKey, session) {
+    const key = getFocusSpanKey(habit.id, dateKey);
+    if (focusSpans[key] && focusSpans[key].firstStartMs) {
+      return;
+    }
+
+    const target = getHabitDailyTargetValue(habit);
+    const stored = getStoredMeasureValue(habit.id, dateKey, session.loggedValueSnapshot);
+    if (!(target > 0) || stored >= target) {
+      return;
+    }
+
+    focusSpans[key] = { firstStartMs: session.startedAtMs, targetMetMs: 0 };
+    persistFocusSpans();
+  }
+
+  // Closes the span when the day's total reaches the target. During a run the
+  // crossing moment is exact -- the run's start plus what the target still
+  // needed -- so it is right even if the page was closed when it happened.
+  // Otherwise a save pushed it over, so it is now. Only called where that
+  // crossing can be observed; a total arriving from elsewhere leaves the span
+  // open rather than inventing a time. Dropping back under the target (a reset,
+  // a lower save) reopens it.
+  function noteFocusProgress(habit, dateKey, session, nowMs) {
+    const span = habit ? focusSpans[getFocusSpanKey(habit.id, dateKey)] : null;
+    if (!span || !span.firstStartMs) {
+      return;
+    }
+
+    const target = getHabitDailyTargetValue(habit);
+    if (!(target > 0)) {
+      return;
+    }
+
+    const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+    const stored = getStoredMeasureValue(habit.id, dateKey, session ? session.loggedValueSnapshot : 0);
+    const liveValue = stored + convertSecondsToHabitValue(getCurrentSessionSeconds(session, now), habit.unit);
+
+    if (liveValue < target) {
+      if (span.targetMetMs) {
+        span.targetMetMs = 0;
+        persistFocusSpans();
+      }
+      return;
+    }
+
+    if (span.targetMetMs) {
+      return;
+    }
+
+    let metAt = now;
+    if (session && session.running && session.startedAtMs > 0 && stored < target) {
+      const neededSeconds = convertHabitValueToSeconds(target - stored, habit.unit)
+        - Math.max(0, Math.floor(Number(session.bufferSeconds) || 0));
+      metAt = session.startedAtMs + (Math.max(0, neededSeconds) * 1000);
+    }
+
+    span.targetMetMs = Math.max(span.firstStartMs, Math.min(metAt, now));
+    persistFocusSpans();
+  }
+
+  function formatClockFromMs(ms) {
+    return new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+
+  function buildFocusSpanCopy(habit, dateKey, nowMs) {
+    const span = focusSpans[getFocusSpanKey(habit.id, dateKey)];
+    if (!span || !span.firstStartMs) {
+      return "";
+    }
+
+    const multiplier = getTimerUnitMultiplier(habit.unit) || 1;
+    const targetMinutes = getHabitDailyTargetValue(habit) * multiplier;
+    const startLabel = formatClockFromMs(span.firstStartMs);
+
+    if (span.targetMetMs) {
+      const totalMinutes = (span.targetMetMs - span.firstStartMs) / 60000;
+      const breakMinutes = Math.max(0, totalMinutes - targetMinutes);
+      return `Start \u2192 target ${formatDurationLabel(totalMinutes)} (${startLabel} \u2192 ${formatClockFromMs(span.targetMetMs)})`
+        + ` \u00b7 ${formatDurationLabel(targetMinutes)} focus + ${formatDurationLabel(breakMinutes)} breaks`;
+    }
+
+    const isToday = dateKey === googleBackend.formatDateKey(new Date());
+    if (!isToday) {
+      return `Started ${startLabel} \u00b7 target not reached that day`;
+    }
+
+    const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+    const session = getExistingTimerSession(habit.id, dateKey);
+    const stored = getStoredMeasureValue(habit.id, dateKey, session ? session.loggedValueSnapshot : 0);
+    const focusedMinutes = Math.min(
+      targetMinutes,
+      (stored + convertSecondsToHabitValue(getCurrentSessionSeconds(session, now), habit.unit)) * multiplier
+    );
+    const elapsedMinutes = Math.max(0, (now - span.firstStartMs) / 60000);
+    return `Started ${startLabel} \u00b7 ${formatDurationLabel(elapsedMinutes)} so far`
+      + ` \u00b7 ${formatDurationLabel(focusedMinutes)} focus + ${formatDurationLabel(Math.max(0, elapsedMinutes - focusedMinutes))} breaks`;
+  }
+
+  // Average start -> target span over the days in the last 30 that reached it.
+  function getFocusSpanAverage(habitId) {
+    const spans = [];
+    const day = new Date();
+    for (let i = 0; i < 30; i++) {
+      const span = focusSpans[getFocusSpanKey(habitId, googleBackend.formatDateKey(day))];
+      if (span && span.firstStartMs && span.targetMetMs) {
+        spans.push((span.targetMetMs - span.firstStartMs) / 60000);
+      }
+      day.setDate(day.getDate() - 1);
+    }
+    if (!spans.length) {
+      return null;
+    }
+    return { minutes: spans.reduce((sum, value) => sum + value, 0) / spans.length, days: spans.length };
   }
 
   function persistWindowLogState() {
@@ -974,10 +1132,26 @@
       if (progressCopyNode) {
         progressCopyNode.textContent = timerMeta.progressText;
       }
+
+      const spanNode = timerPanel
+        ? timerPanel.querySelector(`[data-timer-span="${timerKey}"]`)
+        : null;
+      if (spanNode) {
+        const spanText = buildFocusSpanCopy(habit, selectedDateKey);
+        if (spanNode.textContent !== spanText) {
+          spanNode.textContent = spanText;
+        }
+      }
     });
   }
 
   function tickTimers() {
+    const nowMs = Date.now();
+    Object.values(state.timers || {}).forEach((session) => {
+      if (session && session.running) {
+        noteFocusProgress(getReadBackend().getHabit(session.habitId), session.dateKey, session, nowMs);
+      }
+    });
     syncTimerTicker();
     if (refreshVisibleWindowSummaries()) {
       return;
@@ -1003,6 +1177,7 @@
     session.running = true;
     session.startedAtMs = Date.now();
     session.windowKey = String(windowKey || getPrimaryWindowKey(habit)).trim() || getPrimaryWindowKey(habit);
+    noteFocusStart(habit, state.selectedDateKey, session);
     persistTimerState();
     syncTimerTicker();
     render();
@@ -1025,7 +1200,10 @@
     const previousAllocations = { ...readWindowLogAllocations(habit.id, state.selectedDateKey, previousTotal).allocations };
     const previousSnapshot = roundNumber(session.loggedValueSnapshot, 4);
     const previousWindowValue = getStoredWindowValueForHabit(habit, state.selectedDateKey, resolvedWindowKey);
-    const sessionSeconds = getCurrentSessionSeconds(session, Date.now());
+    const pausedAtMs = Date.now();
+    const sessionSeconds = getCurrentSessionSeconds(session, pausedAtMs);
+    // Settle the target crossing while this run's start is still known.
+    noteFocusProgress(habit, state.selectedDateKey, session, pausedAtMs);
     session.running = false;
     session.startedAtMs = 0;
     syncTimerTicker();
@@ -1091,6 +1269,7 @@
     // as a floor, so a stale one keeps showing time that is no longer logged.
     const entry = getReadBackend().getEntryForDate(habitId, state.selectedDateKey);
     session.loggedValueSnapshot = roundNumber(Math.max(0, Number(entry && entry.value) || 0), 4);
+    noteFocusProgress(habit, state.selectedDateKey, session, Date.now());
     persistTimerState();
     syncTimerTicker();
     render();
@@ -2033,6 +2212,7 @@
                           ${timerMeta.canReset ? "" : "disabled"}
                         >Reset</button>
                       </div>
+                      <div class="timer-span" data-timer-span="${escapeHtml(timerKey)}">${escapeHtml(buildFocusSpanCopy(habit, state.selectedDateKey))}</div>
                     </div>
                   `;
                 })()
@@ -2093,7 +2273,11 @@
                     const volumeHtml = habit.type === "measurable" && s.target30 > 0
                       ? `<div class="insight-stat"><span class="insight-val">${s.logged30}/${s.target30}${habit.unit ? " " + escapeHtml(habit.unit) : ""}</span><span class="insight-lbl">monthly</span></div>`
                       : "";
-                    return `<div class="habit-insight-bar"><div class="insight-stat"><span class="insight-val">${s.streak}</span><span class="insight-lbl">day streak</span></div><div class="insight-stat"><span class="insight-val">${s.completions}/${s.activeDays}</span><span class="insight-lbl">last 30 days</span></div>${volumeHtml}</div>`;
+                    const spanAvg = supportsHabitTimer(habit) ? getFocusSpanAverage(habit.id) : null;
+                    const spanHtml = spanAvg
+                      ? `<div class="insight-stat"><span class="insight-val">${escapeHtml(formatDurationLabel(spanAvg.minutes))}</span><span class="insight-lbl">avg start \u2192 target (${spanAvg.days}d)</span></div>`
+                      : "";
+                    return `<div class="habit-insight-bar"><div class="insight-stat"><span class="insight-val">${s.streak}</span><span class="insight-lbl">day streak</span></div><div class="insight-stat"><span class="insight-val">${s.completions}/${s.activeDays}</span><span class="insight-lbl">last 30 days</span></div>${volumeHtml}${spanHtml}</div>`;
                   })()}
                 </div>
               </article>
@@ -2332,6 +2516,9 @@
     clearWindowLogsForHabitDate(habitId, state.selectedDateKey);
     clearMeasureDraftValue(habitId, state.selectedDateKey);
     syncTimerSnapshot(habitId, state.selectedDateKey, update.nextTotal);
+    if (supportsHabitTimer(habit)) {
+      noteFocusProgress(habit, state.selectedDateKey, getTimerSession(habit, state.selectedDateKey), Date.now());
+    }
     render();
   }
 

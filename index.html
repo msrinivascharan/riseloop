@@ -1010,6 +1010,9 @@
       background: linear-gradient(90deg, #e5b178, #cf8b6a);
     }
 
+    /* Start -> target span. Empty until the first Start of the day. */
+    .timer-span { margin-top: 6px; font-size: 0.72rem; font-weight: 600; color: var(--muted); }
+    .timer-span:empty { display: none; }
     .timer-progress-copy {
       color: var(--muted);
       font-size: 0.82rem;
@@ -2594,6 +2597,7 @@
     #checkInList .timer-progress-bar { flex: 1 1 auto; height: 5px; }
     #checkInList .timer-progress-copy { font-size: 0.62rem; white-space: nowrap; }
     #checkInList .timer-row { gap: 5px; flex: none; margin: 0; }
+    #checkInList .timer-span { flex: 1 1 100%; margin: 0; font-size: 0.62rem; }
 
     /* 30-day insights sit as one quiet trailing line. */
     #checkInList .habit-insight-bar {
@@ -2862,7 +2866,7 @@
   <script src="system_habits_config.local.js"></script>
   <script src="system_habits_shared.js?v=20260803-toast2"></script>
   <script src="system_habits_backend.google.js?v=20260804-auth1"></script>
-  <script src="system_habits_app.js?v=20260526-disable1"></script>
+  <script src="system_habits_app.js?v=20261005-span1"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="window.systemHabitsGapiLoaded && window.systemHabitsGapiLoaded()"></script>
   <script async defer src="https://accounts.google.com/gsi/client" onload="window.systemHabitsGisLoaded && window.systemHabitsGisLoaded()"></script>
 
